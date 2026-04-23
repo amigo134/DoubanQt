@@ -64,7 +64,7 @@ private:
     static constexpr int MY_CARD_W = 120;
     static constexpr int MY_CARD_H = 150;
     static constexpr int TOP250_CARD_W = 110;
-    static constexpr int TOP250_CARD_H = 170;
+    static constexpr int TOP250_CARD_H = 200;
     static constexpr int MARGIN = 20;
     static constexpr int SPACING = 12;
 };

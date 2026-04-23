@@ -1,8 +1,11 @@
 #include "homewidget.h"
+#include "imagecache.h"
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QFrame>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
 
 const QStringList HomeWidget::HOT_SEARCHES = {
     "流浪地球", "哪吒", "长津湖", "封神", "满江红",
@@ -145,7 +148,7 @@ void HomeWidget::buildUI()
 
 int HomeWidget::calcHotSearchCols() const
 {
-    int w = m_hotSearchWrap->width() - 2 * MARGIN;
+    int w = width() - 2 * 24 - 2 * MARGIN;
     if (w <= 0) w = 800;
     int cols = w / (100 + SPACING);
     int rem = w - cols * (100 + SPACING) + SPACING;
@@ -155,7 +158,7 @@ int HomeWidget::calcHotSearchCols() const
 
 int HomeWidget::calcMyListCols() const
 {
-    int w = m_myListWrap->width() - 2 * MARGIN;
+    int w = width() - 2 * 24 - 2 * MARGIN;
     if (w <= 0) w = 800;
     int cols = w / (MY_CARD_W + SPACING);
     int rem = w - cols * (MY_CARD_W + SPACING) + SPACING;
@@ -235,7 +238,7 @@ void HomeWidget::rebuildMyListRows()
 
 int HomeWidget::calcTop250Cols() const
 {
-    int w = m_top250Wrap->width() - 2 * MARGIN;
+    int w = width() - 2 * 24 - 2 * MARGIN;
     if (w <= 0) w = 800;
     int cols = w / (TOP250_CARD_W + SPACING);
     int rem = w - cols * (TOP250_CARD_W + SPACING) + SPACING;
@@ -303,10 +306,9 @@ void HomeWidget::setTop250Data(const QList<Movie>& movies)
 
     int cols = calcTop250Cols();
     m_top250Cols = cols;
-    int maxItems = qMin(movies.size(), cols * 2);
 
     QHBoxLayout* row = nullptr;
-    for (int i = 0; i < maxItems; ++i) {
+    for (int i = 0; i < movies.size(); ++i) {
         const Movie& m = movies[i];
         auto* card = new QFrame(m_top250Wrap);
         card->setFixedSize(TOP250_CARD_W, TOP250_CARD_H);
@@ -321,25 +323,56 @@ void HomeWidget::setTop250Data(const QList<Movie>& movies)
         card->installEventFilter(this);
 
         auto* cl = new QVBoxLayout(card);
-        cl->setContentsMargins(6, 8, 6, 8);
-        cl->setSpacing(4);
+        cl->setContentsMargins(6, 6, 6, 6);
+        cl->setSpacing(3);
 
-        auto* rankLabel = new QLabel(QString("TOP %1").arg(i + 1));
-        rankLabel->setAlignment(Qt::AlignCenter);
-        rankLabel->setStyleSheet("font-size: 10px; color: #F5A623; font-weight: bold;");
+        auto* posterLabel = new QLabel();
+        posterLabel->setFixedSize(98, 130);
+        posterLabel->setAlignment(Qt::AlignCenter);
+        posterLabel->setStyleSheet("background: #E8E8EC; border-radius: 6px; font-size: 20px; color: #BBB;");
+        posterLabel->setText("🎬");
 
-        auto* nm = new QLabel(m.getName().left(6) + (m.getName().length() > 6 ? "..." : ""));
-        nm->setAlignment(Qt::AlignCenter);
-        nm->setWordWrap(true);
-        nm->setStyleSheet("font-size: 12px; color: #333; font-weight: bold;");
+        QString posterUrl = m.getPoster();
+        if (!posterUrl.isEmpty()) {
+            ImageCache::instance().loadImage(posterUrl, this, [posterLabel](const QPixmap& pixmap) {
+                if (!pixmap.isNull()) {
+                    QPixmap scaled = pixmap.scaled(posterLabel->size(),
+                        Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+                    QPixmap rounded(posterLabel->size());
+                    rounded.fill(Qt::transparent);
+                    QPainter p(&rounded);
+                    p.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath path;
+                    path.addRoundedRect(rounded.rect(), 6, 6);
+                    p.setClipPath(path);
+                    int x = (rounded.width() - scaled.width()) / 2;
+                    int y = (rounded.height() - scaled.height()) / 2;
+                    p.drawPixmap(x, y, scaled);
+                    p.end();
+                    posterLabel->setPixmap(rounded);
+                }
+            });
+        }
 
-        auto* rt = new QLabel(m.doubanRating > 0 ? QString("⭐ %1").arg(m.doubanRating, 0, 'f', 1) : m.year);
-        rt->setAlignment(Qt::AlignCenter);
-        rt->setStyleSheet("font-size: 11px; color: #FF6000; font-weight: bold;");
+        auto* infoRow = new QHBoxLayout();
+        infoRow->setSpacing(2);
 
-        cl->addWidget(rankLabel);
-        cl->addStretch();
-        cl->addWidget(nm);
+        auto* rankLabel = new QLabel(QString("TOP%1").arg(i + 1));
+        rankLabel->setStyleSheet("font-size: 9px; color: #F5A623; font-weight: bold;");
+
+        auto* nm = new QLabel(m.getName().left(5) + (m.getName().length() > 5 ? "..." : ""));
+        nm->setStyleSheet("font-size: 11px; color: #333; font-weight: bold;");
+        nm->setWordWrap(false);
+
+        infoRow->addWidget(rankLabel);
+        infoRow->addStretch();
+        infoRow->addWidget(nm);
+
+        auto* rt = new QLabel(m.doubanRating > 0 ? QString("⭐%1").arg(m.doubanRating, 0, 'f', 1) : m.year);
+        rt->setStyleSheet("font-size: 10px; color: #FF6000; font-weight: bold;");
+
+        cl->addWidget(posterLabel);
+        cl->addLayout(infoRow);
         cl->addWidget(rt);
 
         m_top250Cards.append(card);

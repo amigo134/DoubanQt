@@ -52,6 +52,8 @@ MainWindow::MainWindow(QWidget* parent)
             this, [this]() { m_api->getTop250(); });
     connect(m_api, &ApiManager::top250Ready,
             m_homeWidget, &HomeWidget::setTop250Data);
+    connect(m_homeWidget, &HomeWidget::movieClicked,
+            this, &MainWindow::onMovieClicked);
 }
 
 void MainWindow::buildUI()
