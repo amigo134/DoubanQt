@@ -48,6 +48,10 @@ MainWindow::MainWindow(QWidget* parent)
                 m_searchEdit->setText(q);
                 performSearch(q);
             });
+    connect(m_homeWidget, &HomeWidget::top250Requested,
+            this, [this]() { m_api->getTop250(); });
+    connect(m_api, &ApiManager::top250Ready,
+            m_homeWidget, &HomeWidget::setTop250Data);
 }
 
 void MainWindow::buildUI()

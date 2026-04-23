@@ -2,6 +2,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QFrame>
+#include <QMouseEvent>
 
 const QStringList HomeWidget::HOT_SEARCHES = {
     "流浪地球", "哪吒", "长津湖", "封神", "满江红",
@@ -21,6 +22,11 @@ HomeWidget::HomeWidget(DatabaseManager* db, QWidget* parent)
     connect(m_resizeTimer, &QTimer::timeout, this, [this]() {
         rebuildHotSearchRows();
         rebuildMyListRows();
+        rebuildTop250Rows();
+    });
+
+    QTimer::singleShot(500, this, [this]() {
+        emit top250Requested();
     });
 }
 
@@ -97,6 +103,23 @@ void HomeWidget::buildUI()
     rebuildHotSearchRows();
     root->addWidget(m_hotSearchWrap);
 
+    auto* top250Title = new QLabel("豆瓣 TOP250");
+    top250Title->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #F5A623; padding-left: 8px;");
+    root->addWidget(top250Title);
+
+    m_top250Wrap = new QWidget();
+    m_top250Wrap->setStyleSheet("background: white; border-radius: 10px;");
+    m_top250OuterLayout = new QVBoxLayout(m_top250Wrap);
+    m_top250OuterLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
+    m_top250OuterLayout->setSpacing(SPACING);
+
+    m_top250EmptyLabel = new QLabel("加载中...");
+    m_top250EmptyLabel->setAlignment(Qt::AlignCenter);
+    m_top250EmptyLabel->setStyleSheet("font-size: 13px; color: #BBB; padding: 36px;");
+    m_top250OuterLayout->addWidget(m_top250EmptyLabel);
+
+    root->addWidget(m_top250Wrap);
+
     auto* myListTitle = new QLabel("我看过的");
     myListTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #FF6000; padding-left: 8px;");
     root->addWidget(myListTitle);
@@ -144,6 +167,18 @@ void HomeWidget::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     m_resizeTimer->start();
+}
+
+bool HomeWidget::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonRelease) {
+        int idx = m_top250Cards.indexOf(qobject_cast<QFrame*>(watched));
+        if (idx >= 0 && idx < m_top250Data.size()) {
+            emit movieClicked(m_top250Data[idx]);
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void HomeWidget::rebuildHotSearchRows()
@@ -195,6 +230,127 @@ void HomeWidget::rebuildMyListRows()
             m_myListOuterLayout->addLayout(row);
         }
         row->addWidget(m_myCards[i]);
+    }
+}
+
+int HomeWidget::calcTop250Cols() const
+{
+    int w = m_top250Wrap->width() - 2 * MARGIN;
+    if (w <= 0) w = 800;
+    int cols = w / (TOP250_CARD_W + SPACING);
+    int rem = w - cols * (TOP250_CARD_W + SPACING) + SPACING;
+    if (rem >= TOP250_CARD_W) cols++;
+    return qMax(1, cols);
+}
+
+void HomeWidget::rebuildTop250Rows()
+{
+    if (m_top250Cards.isEmpty()) return;
+
+    while (QLayoutItem* item = m_top250OuterLayout->takeAt(0)) {
+        QLayout* sub = item->layout();
+        if (sub) {
+            while (QLayoutItem* si = sub->takeAt(0)) delete si;
+        }
+        delete item;
+    }
+
+    int cols = calcTop250Cols();
+    m_top250Cols = cols;
+
+    QHBoxLayout* row = nullptr;
+    for (int i = 0; i < m_top250Cards.size(); ++i) {
+        if (i % cols == 0) {
+            row = new QHBoxLayout();
+            row->setSpacing(SPACING);
+            row->setAlignment(Qt::AlignLeft);
+            m_top250OuterLayout->addLayout(row);
+        }
+        row->addWidget(m_top250Cards[i]);
+    }
+}
+
+void HomeWidget::setTop250Data(const QList<Movie>& movies)
+{
+    for (auto* card : m_top250Cards) {
+        m_top250OuterLayout->removeWidget(card);
+        delete card;
+    }
+    m_top250Cards.clear();
+    m_top250Cols = 0;
+    m_top250Data = movies;
+
+    if (movies.isEmpty()) {
+        m_top250EmptyLabel->setVisible(true);
+        m_top250EmptyLabel->setText("暂无数据");
+        while (QLayoutItem* item = m_top250OuterLayout->takeAt(0)) {
+            QLayout* sub = item->layout();
+            if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
+            delete item;
+        }
+        m_top250OuterLayout->addWidget(m_top250EmptyLabel);
+        return;
+    }
+
+    m_top250EmptyLabel->setVisible(false);
+    m_top250OuterLayout->removeWidget(m_top250EmptyLabel);
+
+    while (QLayoutItem* item = m_top250OuterLayout->takeAt(0)) {
+        QLayout* sub = item->layout();
+        if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
+        delete item;
+    }
+
+    int cols = calcTop250Cols();
+    m_top250Cols = cols;
+    int maxItems = qMin(movies.size(), cols * 2);
+
+    QHBoxLayout* row = nullptr;
+    for (int i = 0; i < maxItems; ++i) {
+        const Movie& m = movies[i];
+        auto* card = new QFrame(m_top250Wrap);
+        card->setFixedSize(TOP250_CARD_W, TOP250_CARD_H);
+        card->setStyleSheet(R"(
+            QFrame {
+                background: white; border-radius: 8px;
+                border: 1px solid #E8E8E8;
+            }
+            QFrame:hover { border-color: #F5A623; background: #FFFBF0; }
+        )");
+        card->setCursor(Qt::PointingHandCursor);
+        card->installEventFilter(this);
+
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(6, 8, 6, 8);
+        cl->setSpacing(4);
+
+        auto* rankLabel = new QLabel(QString("TOP %1").arg(i + 1));
+        rankLabel->setAlignment(Qt::AlignCenter);
+        rankLabel->setStyleSheet("font-size: 10px; color: #F5A623; font-weight: bold;");
+
+        auto* nm = new QLabel(m.getName().left(6) + (m.getName().length() > 6 ? "..." : ""));
+        nm->setAlignment(Qt::AlignCenter);
+        nm->setWordWrap(true);
+        nm->setStyleSheet("font-size: 12px; color: #333; font-weight: bold;");
+
+        auto* rt = new QLabel(m.doubanRating > 0 ? QString("⭐ %1").arg(m.doubanRating, 0, 'f', 1) : m.year);
+        rt->setAlignment(Qt::AlignCenter);
+        rt->setStyleSheet("font-size: 11px; color: #FF6000; font-weight: bold;");
+
+        cl->addWidget(rankLabel);
+        cl->addStretch();
+        cl->addWidget(nm);
+        cl->addWidget(rt);
+
+        m_top250Cards.append(card);
+
+        if (i % cols == 0) {
+            row = new QHBoxLayout();
+            row->setSpacing(SPACING);
+            row->setAlignment(Qt::AlignLeft);
+            m_top250OuterLayout->addLayout(row);
+        }
+        row->addWidget(card);
     }
 }
 

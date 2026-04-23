@@ -176,10 +176,16 @@ void MovieDetailWidget::buildUI()
     m_durationLabel = makeMetaLabel("");
     m_genreLabel = makeMetaLabel("");
     m_countryLabel = makeMetaLabel("");
+    m_languageLabel = makeMetaLabel("");
+    m_dateReleasedLabel = makeMetaLabel("");
     m_directorLabel = makeMetaLabel("");
     m_directorLabel->setWordWrap(true);
+    m_writerLabel = makeMetaLabel("");
+    m_writerLabel->setWordWrap(true);
     m_actorLabel = makeMetaLabel("");
     m_actorLabel->setWordWrap(true);
+    m_aliasLabel = makeMetaLabel("");
+    m_aliasLabel->setWordWrap(true);
 
     auto makeMetaKey = [](const QString& text) {
         auto* l = new QLabel(text);
@@ -187,18 +193,37 @@ void MovieDetailWidget::buildUI()
         return l;
     };
 
-    metaLayout->addWidget(makeMetaKey("年份"), 0, 0);
-    metaLayout->addWidget(m_yearLabel, 0, 1);
-    metaLayout->addWidget(makeMetaKey("时长"), 1, 0);
-    metaLayout->addWidget(m_durationLabel, 1, 1);
-    metaLayout->addWidget(makeMetaKey("类型"), 2, 0);
-    metaLayout->addWidget(m_genreLabel, 2, 1);
-    metaLayout->addWidget(makeMetaKey("地区"), 3, 0);
-    metaLayout->addWidget(m_countryLabel, 3, 1);
-    metaLayout->addWidget(makeMetaKey("导演"), 4, 0);
-    metaLayout->addWidget(m_directorLabel, 4, 1);
-    metaLayout->addWidget(makeMetaKey("主演"), 5, 0, 1, 1, Qt::AlignTop);
-    metaLayout->addWidget(m_actorLabel, 5, 1);
+    int row = 0;
+    metaLayout->addWidget(makeMetaKey("年份"), row, 0);
+    metaLayout->addWidget(m_yearLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("时长"), row, 0);
+    metaLayout->addWidget(m_durationLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("类型"), row, 0);
+    metaLayout->addWidget(m_genreLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("地区"), row, 0);
+    metaLayout->addWidget(m_countryLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("语言"), row, 0);
+    metaLayout->addWidget(m_languageLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("上映"), row, 0);
+    metaLayout->addWidget(m_dateReleasedLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("导演"), row, 0);
+    metaLayout->addWidget(m_directorLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("编剧"), row, 0, 1, 1, Qt::AlignTop);
+    metaLayout->addWidget(m_writerLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("主演"), row, 0, 1, 1, Qt::AlignTop);
+    metaLayout->addWidget(m_actorLabel, row, 1);
+    row++;
+    metaLayout->addWidget(makeMetaKey("又名"), row, 0, 1, 1, Qt::AlignTop);
+    metaLayout->addWidget(m_aliasLabel, row, 1);
+    row++;
     metaLayout->setColumnStretch(1, 1);
     m_infoLayout->addWidget(metaFrame);
 
@@ -353,9 +378,19 @@ void MovieDetailWidget::setMovie(const Movie& movie)
     m_yearLabel->setText(movie.year);
 
     if (movie.duration > 0) {
-        m_durationLabel->setText(QString("%1 分钟").arg(movie.getDurationMinutes()));
+        if (movie.episodes > 0)
+            m_durationLabel->setText(QString("%1 分钟 · 共 %2 集").arg(movie.getDurationMinutes()).arg(movie.episodes));
+        else if (movie.totalSeasons > 0)
+            m_durationLabel->setText(QString("%1 分钟 · 共 %2 季").arg(movie.getDurationMinutes()).arg(movie.totalSeasons));
+        else
+            m_durationLabel->setText(QString("%1 分钟").arg(movie.getDurationMinutes()));
     } else if (movie.episodes > 0) {
-        m_durationLabel->setText(QString("共 %1 集").arg(movie.episodes));
+        if (movie.totalSeasons > 0)
+            m_durationLabel->setText(QString("共 %1 季 %2 集").arg(movie.totalSeasons).arg(movie.episodes));
+        else
+            m_durationLabel->setText(QString("共 %1 集").arg(movie.episodes));
+    } else if (movie.totalSeasons > 0) {
+        m_durationLabel->setText(QString("共 %1 季").arg(movie.totalSeasons));
     } else {
         m_durationLabel->setText("--");
     }
@@ -363,9 +398,25 @@ void MovieDetailWidget::setMovie(const Movie& movie)
     m_genreLabel->setText(movie.getGenre().isEmpty() ? "--" : movie.getGenre());
     m_countryLabel->setText(movie.getCountry().isEmpty() ? "--" : movie.getCountry());
 
+    QString lang;
+    for (const auto& d : movie.langData) {
+        if (d.lang == "Cn" && !d.language.isEmpty()) { lang = d.language; break; }
+    }
+    m_languageLabel->setText(lang.isEmpty() ? "--" : lang);
+
+    m_dateReleasedLabel->setText(movie.dateReleased.isEmpty() ? "--" : movie.dateReleased);
+
     QStringList directors;
     for (const auto& d : movie.directors) directors << d.name;
     m_directorLabel->setText(directors.isEmpty() ? "--" : directors.join(" / "));
+
+    QStringList writers;
+    int wcnt = 0;
+    for (const auto& w : movie.writers) {
+        if (++wcnt > 4) break;
+        writers << w.name;
+    }
+    m_writerLabel->setText(writers.isEmpty() ? "--" : writers.join(" / "));
 
     QStringList actors;
     int cnt = 0;
@@ -374,6 +425,17 @@ void MovieDetailWidget::setMovie(const Movie& movie)
         actors << a.name;
     }
     m_actorLabel->setText(actors.isEmpty() ? "--" : actors.join(" / "));
+
+    if (!movie.alias.isEmpty()) {
+        QStringList aliases = movie.alias.split(" / ");
+        QStringList filtered;
+        for (const auto& a : aliases) {
+            if (a != movie.getName() && a != movie.originalName) filtered << a;
+        }
+        m_aliasLabel->setText(filtered.isEmpty() ? "--" : filtered.join(" / "));
+    } else {
+        m_aliasLabel->setText("--");
+    }
 
     m_descLabel->setText(movie.getDescription().isEmpty() ? "暂无简介" : movie.getDescription());
 

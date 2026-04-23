@@ -44,7 +44,11 @@ private:
     QLabel* m_genreLabel;
     QLabel* m_countryLabel;
     QLabel* m_directorLabel;
+    QLabel* m_writerLabel;
     QLabel* m_actorLabel;
+    QLabel* m_languageLabel;
+    QLabel* m_dateReleasedLabel;
+    QLabel* m_aliasLabel;
     QLabel* m_descLabel;
 
     QLabel* m_doubanRatingLabel;

@@ -12,6 +12,7 @@
 const QString ApiManager::BASE_URL = "https://api.wmdb.tv";
 const QString ApiManager::SEARCH_URL = "https://api.wmdb.tv/api/v1/movie/search";
 const QString ApiManager::DETAIL_URL = "https://api.wmdb.tv/movie/api";
+const QString ApiManager::TOP250_URL = "https://api.wmdb.tv/api/v1/top";
 
 ApiManager::ApiManager(QObject* parent)
     : QObject(parent)
@@ -84,6 +85,35 @@ void ApiManager::getMovieById(const QString& doubanId)
     });
 }
 
+void ApiManager::getTop250(const QString& type, int limit, int skip, const QString& lang)
+{
+    QUrl url(TOP250_URL);
+    QUrlQuery urlQuery;
+    urlQuery.addQueryItem("type", type);
+    urlQuery.addQueryItem("limit", QString::number(limit));
+    urlQuery.addQueryItem("skip", QString::number(skip));
+    urlQuery.addQueryItem("lang", lang);
+    url.setQuery(urlQuery);
+
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      "Mozilla/5.0 DoubanQt/1.0");
+    request.setRawHeader("Accept", "application/json");
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+
+    QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
+    sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
+    request.setSslConfiguration(sslConfig);
+
+    emit networkBusy(true);
+    QNetworkReply* reply = m_nam->get(request);
+    connect(reply, &QNetworkReply::sslErrors, reply,
+            [reply](const QList<QSslError>&){ reply->ignoreSslErrors(); });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        onTop250Reply(reply);
+    });
+}
+
 void ApiManager::onSearchReply(QNetworkReply* reply)
 {
     emit networkBusy(false);
@@ -148,6 +178,40 @@ void ApiManager::onDetailReply(QNetworkReply* reply)
     }
 
     emit movieDetailReady(movie);
+}
+
+void ApiManager::onTop250Reply(QNetworkReply* reply)
+{
+    emit networkBusy(false);
+    reply->deleteLater();
+
+    if (reply->error() != QNetworkReply::NoError) {
+        emit errorOccurred(reply->errorString());
+        return;
+    }
+
+    QByteArray data = reply->readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+
+    QList<Movie> movies;
+    if (doc.isArray()) {
+        QJsonArray arr = doc.array();
+        for (const QJsonValue& val : arr) {
+            if (val.isObject()) {
+                movies.append(parseMovie(val.toObject()));
+            }
+        }
+    } else if (doc.isObject()) {
+        QJsonObject root = doc.object();
+        QJsonArray dataArr = root["data"].toArray();
+        for (const QJsonValue& val : dataArr) {
+            if (val.isObject()) {
+                movies.append(parseMovie(val.toObject()));
+            }
+        }
+    }
+
+    emit top250Ready(movies);
 }
 
 Movie ApiManager::parseMovie(const QJsonObject& obj)
