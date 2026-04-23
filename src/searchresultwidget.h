@@ -3,9 +3,11 @@
 #include <QScrollArea>
 #include <QLabel>
 #include <QPushButton>
+#include <QGridLayout>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QResizeEvent>
+#include <QTimer>
 #include "moviemodel.h"
 #include "moviecard.h"
 
@@ -29,21 +31,21 @@ protected:
 
 private:
     void clearCards();
-    void addMovieCard(const Movie& movie);
     void rearrangeCards();
     int calculateColumns() const;
 
     QScrollArea* m_scrollArea;
     QWidget* m_gridContainer;
-    QVBoxLayout* m_outerLayout;
+    QGridLayout* m_gridLayout;
     QLabel* m_statusLabel;
     QPushButton* m_loadMoreBtn;
     QLabel* m_totalLabel;
+    QTimer* m_resizeTimer;
 
     int m_currentSkip = 0;
-    SearchResult m_lastResult;
-    int m_row = 0;
+    QList<MovieCard*> m_cards;
     QList<Movie> m_allMovies;
+    int m_currentCols = 0;
     static constexpr int CARD_WIDTH = 170;
     static constexpr int GRID_SPACING = 18;
     static constexpr int MARGIN = 24;
