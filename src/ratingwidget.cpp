@@ -28,7 +28,7 @@ void RatingWidget::setReadOnly(bool readOnly)
 void RatingWidget::setStarSize(int size)
 {
     m_starSize = size;
-    setFixedSize(m_starCount * (size + 4), size + 4);
+    setFixedSize(m_starCount * (size + 6), size + 4);
 }
 
 void RatingWidget::setMaxRating(int max)
@@ -38,7 +38,7 @@ void RatingWidget::setMaxRating(int max)
 
 double RatingWidget::ratingFromPos(int x) const
 {
-    double starWidth = m_starSize + 4;
+    double starWidth = m_starSize + 6;
     double pos = x / starWidth;
     double rating = (pos + 0.5) * (m_maxRating / m_starCount);
     return qBound(0.0, rating, (double)m_maxRating);
@@ -83,7 +83,7 @@ void RatingWidget::paintEvent(QPaintEvent*)
     double displayRating = (m_hoverRating > 0 && !m_readOnly) ? m_hoverRating : m_rating;
     double starsToFill = displayRating / m_maxRating * m_starCount;
 
-    int starSpacing = 4;
+    int starSpacing = 6;
     double outerR = m_starSize / 2.0;
     double innerR = outerR * 0.4;
 
@@ -96,21 +96,21 @@ void RatingWidget::paintEvent(QPaintEvent*)
         double fill = qBound(0.0, starsToFill - i, 1.0);
 
         if (fill >= 1.0) {
-            painter.setBrush(QColor(255, 165, 0));
+            painter.setBrush(QColor(255, 186, 8));
             painter.setPen(Qt::NoPen);
             painter.drawPolygon(star);
         } else if (fill > 0.0) {
-            painter.setBrush(QColor(230, 230, 230));
+            painter.setBrush(QColor(228, 228, 228));
             painter.setPen(Qt::NoPen);
             painter.drawPolygon(star);
 
             painter.save();
             painter.setClipRect(QRectF(cx - outerR, 0, outerR * 2 * fill, height()));
-            painter.setBrush(QColor(255, 165, 0));
+            painter.setBrush(QColor(255, 186, 8));
             painter.drawPolygon(star);
             painter.restore();
         } else {
-            painter.setBrush(QColor(230, 230, 230));
+            painter.setBrush(QColor(228, 228, 228));
             painter.setPen(Qt::NoPen);
             painter.drawPolygon(star);
         }
@@ -119,7 +119,7 @@ void RatingWidget::paintEvent(QPaintEvent*)
 
 QSize RatingWidget::minimumSizeHint() const
 {
-    return QSize(m_starCount * (m_starSize + 4), m_starSize + 4);
+    return QSize(m_starCount * (m_starSize + 6), m_starSize + 4);
 }
 
 QSize RatingWidget::sizeHint() const

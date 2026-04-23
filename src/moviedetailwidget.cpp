@@ -21,14 +21,14 @@ void MovieDetailWidget::buildUI()
 {
     setStyleSheet(R"(
         MovieDetailWidget {
-            background: #F5F6F8;
+            background: #F7F7F9;
         }
         QLabel#sectionTitle {
             font-size: 16px;
             font-weight: bold;
-            color: #2D2D2D;
-            border-left: 4px solid #00B386;
-            padding-left: 10px;
+            color: #333;
+            border-left: 3px solid #00B51D;
+            padding-left: 8px;
             margin-top: 8px;
         }
         QLabel#metaLabel {
@@ -38,7 +38,7 @@ void MovieDetailWidget::buildUI()
         }
         QPushButton#backBtn {
             background: transparent;
-            color: #00B386;
+            color: #00B51D;
             border: none;
             font-size: 14px;
             font-weight: bold;
@@ -46,59 +46,55 @@ void MovieDetailWidget::buildUI()
             padding: 6px 0;
         }
         QPushButton#backBtn:hover {
-            color: #009A73;
+            color: #009A18;
         }
         QPushButton#wishBtn {
-            background: #FFF8ED;
-            color: #FF8C00;
-            border: 1px solid #FFD580;
-            border-radius: 20px;
-            padding: 9px 22px;
+            background: #FFF5F5;
+            color: #E74C3C;
+            border: 1px solid #FFD4D4;
+            border-radius: 6px;
+            padding: 8px 20px;
             font-size: 13px;
             font-weight: bold;
         }
         QPushButton#wishBtn:checked, QPushButton#wishBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #FFA030, stop:1 #FF8C00);
+            background: #E74C3C;
             color: white;
-            border-color: #FF8C00;
+            border-color: #E74C3C;
         }
         QPushButton#watchedBtn {
-            background: #E8FFF5;
-            color: #00B386;
-            border: 1px solid #7FDFC4;
-            border-radius: 20px;
-            padding: 9px 22px;
+            background: #F0FFF0;
+            color: #00B51D;
+            border: 1px solid #B8E6B8;
+            border-radius: 6px;
+            padding: 8px 20px;
             font-size: 13px;
             font-weight: bold;
         }
         QPushButton#watchedBtn:checked, QPushButton#watchedBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00C49A, stop:1 #009A73);
+            background: #00B51D;
             color: white;
-            border-color: #00B386;
+            border-color: #00B51D;
         }
         QPushButton#reviewBtn {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00C49A, stop:1 #009A73);
+            background: #00B51D;
             color: white;
             border: none;
-            border-radius: 20px;
-            padding: 9px 28px;
+            border-radius: 6px;
+            padding: 8px 24px;
             font-size: 13px;
             font-weight: bold;
         }
         QPushButton#reviewBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00D4AA, stop:1 #00AA83);
+            background: #009A18;
         }
         QPushButton#reviewBtn:pressed {
-            background: #008A63;
+            background: #008012;
         }
         QFrame#ratingCard {
             background: white;
-            border-radius: 12px;
-            border: 1px solid #ECECEC;
+            border-radius: 10px;
+            border: 1px solid #EEE;
         }
     )");
 
@@ -107,10 +103,10 @@ void MovieDetailWidget::buildUI()
     mainLayout->setSpacing(0);
 
     auto* navBar = new QWidget();
-    navBar->setStyleSheet("background: white; border-bottom: 1px solid #ECECEC;");
-    navBar->setFixedHeight(54);
+    navBar->setStyleSheet("background: white; border-bottom: 1px solid #E8E8EC;");
+    navBar->setFixedHeight(50);
     auto* navLayout = new QHBoxLayout(navBar);
-    navLayout->setContentsMargins(20, 0, 20, 0);
+    navLayout->setContentsMargins(24, 0, 24, 0);
 
     auto* backBtn = new QPushButton("← 返回");
     backBtn->setObjectName("backBtn");
@@ -124,30 +120,30 @@ void MovieDetailWidget::buildUI()
     m_scrollArea->setFrameShape(QFrame::NoFrame);
     m_scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scrollArea->verticalScrollBar()->setStyleSheet(R"(
-        QScrollBar:vertical { width: 8px; background: transparent; }
-        QScrollBar::handle:vertical { background: rgba(0,0,0,0.15); border-radius: 4px; }
-        QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.25); }
+        QScrollBar:vertical { width: 6px; background: transparent; }
+        QScrollBar::handle:vertical { background: rgba(0,0,0,0.10); border-radius: 3px; }
+        QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.20); }
     )");
 
     m_contentWidget = new QWidget();
-    m_contentWidget->setStyleSheet("background: #F5F6F8;");
+    m_contentWidget->setStyleSheet("background: #F7F7F9;");
     m_scrollArea->setWidget(m_contentWidget);
     mainLayout->addWidget(m_scrollArea);
 
     auto* contentLayout = new QVBoxLayout(m_contentWidget);
-    contentLayout->setContentsMargins(28, 28, 28, 28);
+    contentLayout->setContentsMargins(32, 24, 32, 28);
     contentLayout->setSpacing(18);
 
     m_topWidget = new QWidget();
-    m_topWidget->setStyleSheet("background: white; border-radius: 14px; border: 1px solid #ECECEC;");
+    m_topWidget->setStyleSheet("background: white; border-radius: 10px; border: 1px solid #EEE;");
     m_topGrid = new QGridLayout(m_topWidget);
-    m_topGrid->setContentsMargins(24, 24, 24, 24);
+    m_topGrid->setContentsMargins(28, 28, 28, 28);
     m_topGrid->setSpacing(28);
 
     m_posterLabel = new QLabel();
     m_posterLabel->setFixedSize(170, 235);
     m_posterLabel->setAlignment(Qt::AlignCenter);
-    m_posterLabel->setStyleSheet("background: #F0F0F0; border-radius: 10px;");
+    m_posterLabel->setStyleSheet("background: #E8E8EC; border-radius: 10px;");
 
     m_infoWidget = new QWidget();
     m_infoLayout = new QVBoxLayout(m_infoWidget);
@@ -155,20 +151,20 @@ void MovieDetailWidget::buildUI()
     m_infoLayout->setSpacing(8);
 
     m_titleLabel = new QLabel();
-    m_titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #1A1A1A;");
+    m_titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #222;");
     m_titleLabel->setWordWrap(true);
     m_infoLayout->addWidget(m_titleLabel);
 
     m_originalTitleLabel = new QLabel();
-    m_originalTitleLabel->setStyleSheet("font-size: 14px; color: #888;");
+    m_originalTitleLabel->setStyleSheet("font-size: 13px; color: #999;");
     m_infoLayout->addWidget(m_originalTitleLabel);
 
     auto* metaFrame = new QFrame();
-    metaFrame->setStyleSheet("background: #F8F9FA; border-radius: 10px;");
+    metaFrame->setStyleSheet("background: #F9F9FB; border-radius: 8px;");
     auto* metaLayout = new QGridLayout(metaFrame);
-    metaLayout->setContentsMargins(14, 14, 14, 14);
-    metaLayout->setVerticalSpacing(8);
-    metaLayout->setHorizontalSpacing(14);
+    metaLayout->setContentsMargins(16, 14, 16, 14);
+    metaLayout->setVerticalSpacing(6);
+    metaLayout->setHorizontalSpacing(12);
 
     auto makeMetaLabel = [](const QString& text) {
         auto* l = new QLabel(text);
@@ -185,17 +181,23 @@ void MovieDetailWidget::buildUI()
     m_actorLabel = makeMetaLabel("");
     m_actorLabel->setWordWrap(true);
 
-    metaLayout->addWidget(new QLabel("<b>年份</b>"), 0, 0);
+    auto makeMetaKey = [](const QString& text) {
+        auto* l = new QLabel(text);
+        l->setStyleSheet("font-size: 12px; color: #AAA; font-weight: bold;");
+        return l;
+    };
+
+    metaLayout->addWidget(makeMetaKey("年份"), 0, 0);
     metaLayout->addWidget(m_yearLabel, 0, 1);
-    metaLayout->addWidget(new QLabel("<b>时长</b>"), 1, 0);
+    metaLayout->addWidget(makeMetaKey("时长"), 1, 0);
     metaLayout->addWidget(m_durationLabel, 1, 1);
-    metaLayout->addWidget(new QLabel("<b>类型</b>"), 2, 0);
+    metaLayout->addWidget(makeMetaKey("类型"), 2, 0);
     metaLayout->addWidget(m_genreLabel, 2, 1);
-    metaLayout->addWidget(new QLabel("<b>地区</b>"), 3, 0);
+    metaLayout->addWidget(makeMetaKey("地区"), 3, 0);
     metaLayout->addWidget(m_countryLabel, 3, 1);
-    metaLayout->addWidget(new QLabel("<b>导演</b>"), 4, 0);
+    metaLayout->addWidget(makeMetaKey("导演"), 4, 0);
     metaLayout->addWidget(m_directorLabel, 4, 1);
-    metaLayout->addWidget(new QLabel("<b>主演</b>"), 5, 0, 1, 1, Qt::AlignTop);
+    metaLayout->addWidget(makeMetaKey("主演"), 5, 0, 1, 1, Qt::AlignTop);
     metaLayout->addWidget(m_actorLabel, 5, 1);
     metaLayout->setColumnStretch(1, 1);
     m_infoLayout->addWidget(metaFrame);
@@ -234,31 +236,35 @@ void MovieDetailWidget::buildUI()
     ratingLayout->setContentsMargins(24, 20, 24, 20);
     ratingLayout->setSpacing(0);
 
-    auto makePlatformRating = [&](const QString& platform, QLabel*& ratingLabel, const QString& color) {
+    auto makePlatformRating = [&](const QString& platform, QLabel*& ratingLabel, const QString& color, const QString& icon) {
         auto* col = new QVBoxLayout();
-        col->setSpacing(4);
+        col->setSpacing(2);
         auto* platformLabel = new QLabel(platform);
         platformLabel->setAlignment(Qt::AlignCenter);
-        platformLabel->setStyleSheet("font-size: 12px; color: #888;");
+        platformLabel->setStyleSheet("font-size: 11px; color: #999;");
+        auto* iconLabel = new QLabel(icon);
+        iconLabel->setAlignment(Qt::AlignCenter);
+        iconLabel->setStyleSheet("font-size: 18px;");
         ratingLabel = new QLabel("--");
         ratingLabel->setAlignment(Qt::AlignCenter);
-        ratingLabel->setStyleSheet(QString("font-size: 28px; font-weight: bold; color: %1;").arg(color));
+        ratingLabel->setStyleSheet(QString("font-size: 26px; font-weight: bold; color: %1;").arg(color));
+        col->addWidget(iconLabel);
         col->addWidget(ratingLabel);
         col->addWidget(platformLabel);
         return col;
     };
 
-    ratingLayout->addLayout(makePlatformRating("豆瓣", m_doubanRatingLabel, "#FF6000"));
+    ratingLayout->addLayout(makePlatformRating("豆瓣", m_doubanRatingLabel, "#00B51D", "🎬"));
     auto* divider1 = new QFrame();
     divider1->setFrameShape(QFrame::VLine);
-    divider1->setStyleSheet("color: #ECECEC;");
+    divider1->setStyleSheet("color: #EEE;");
     ratingLayout->addWidget(divider1);
-    ratingLayout->addLayout(makePlatformRating("IMDb", m_imdbRatingLabel, "#F5C518"));
+    ratingLayout->addLayout(makePlatformRating("IMDb", m_imdbRatingLabel, "#F5A623", "🌟"));
     auto* divider2 = new QFrame();
     divider2->setFrameShape(QFrame::VLine);
-    divider2->setStyleSheet("color: #ECECEC;");
+    divider2->setStyleSheet("color: #EEE;");
     ratingLayout->addWidget(divider2);
-    ratingLayout->addLayout(makePlatformRating("烂番茄", m_rottenRatingLabel, "#FA320A"));
+    ratingLayout->addLayout(makePlatformRating("烂番茄", m_rottenRatingLabel, "#E74C3C", "🍅"));
 
     contentLayout->addWidget(ratingCard);
 
@@ -268,7 +274,7 @@ void MovieDetailWidget::buildUI()
 
     m_descLabel = new QLabel();
     m_descLabel->setWordWrap(true);
-    m_descLabel->setStyleSheet("font-size: 14px; color: #555; line-height: 1.8; background: white; border-radius: 12px; padding: 18px; border: 1px solid #ECECEC;");
+    m_descLabel->setStyleSheet("font-size: 14px; color: #555; line-height: 1.8; background: white; border-radius: 10px; padding: 20px; border: 1px solid #EEE;");
     m_descLabel->setTextFormat(Qt::PlainText);
     contentLayout->addWidget(m_descLabel);
 
@@ -280,7 +286,7 @@ void MovieDetailWidget::buildUI()
     userRatingCard->setObjectName("ratingCard");
     auto* userRatingLayout = new QVBoxLayout(userRatingCard);
     userRatingLayout->setContentsMargins(24, 20, 24, 20);
-    userRatingLayout->setSpacing(10);
+    userRatingLayout->setSpacing(8);
 
     auto* ratingRow = new QHBoxLayout();
     m_userRatingWidget = new RatingWidget(this);
@@ -288,7 +294,7 @@ void MovieDetailWidget::buildUI()
     m_userRatingWidget->setReadOnly(true);
 
     m_userRatingTextLabel = new QLabel("尚未评分");
-    m_userRatingTextLabel->setStyleSheet("font-size: 14px; color: #666; margin-left: 12px; font-weight: bold;");
+    m_userRatingTextLabel->setStyleSheet("font-size: 14px; color: #00B51D; margin-left: 12px; font-weight: bold;");
     ratingRow->addWidget(m_userRatingWidget);
     ratingRow->addWidget(m_userRatingTextLabel);
     ratingRow->addStretch();
@@ -296,7 +302,7 @@ void MovieDetailWidget::buildUI()
 
     m_userReviewLabel = new QLabel();
     m_userReviewLabel->setWordWrap(true);
-    m_userReviewLabel->setStyleSheet("font-size: 14px; color: #555; border-left: 4px solid #00B386; padding-left: 12px; margin-top: 4px;");
+    m_userReviewLabel->setStyleSheet("font-size: 14px; color: #555; border-left: 3px solid #00B51D; padding-left: 10px; margin-top: 4px;");
     m_userReviewLabel->setVisible(false);
     userRatingLayout->addWidget(m_userReviewLabel);
 
@@ -395,8 +401,8 @@ void MovieDetailWidget::setMovie(const Movie& movie)
 void MovieDetailWidget::loadPoster(const QString& url)
 {
     if (url.isEmpty()) {
-        m_posterLabel->setText("🎬 暂无海报");
-        m_posterLabel->setStyleSheet("background: #F0F0F0; border-radius: 10px; font-size: 14px; color: #BBB;");
+        m_posterLabel->setText("🎬");
+        m_posterLabel->setStyleSheet("background: #E8E8EC; border-radius: 10px; font-size: 28px; color: #BBB;");
         return;
     }
 

@@ -5,6 +5,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QResizeEvent>
 #include <QTimer>
 #include "moviemodel.h"
@@ -48,8 +49,8 @@ private:
     QList<UserReview> m_watchedData;
 
     static const QStringList HOT_SEARCHES;
-    static constexpr int MY_CARD_W = 110;
-    static constexpr int MY_CARD_H = 140;
+    static constexpr int MY_CARD_W = 120;
+    static constexpr int MY_CARD_H = 150;
     static constexpr int MARGIN = 20;
     static constexpr int SPACING = 12;
 };

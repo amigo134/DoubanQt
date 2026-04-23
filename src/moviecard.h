@@ -27,8 +27,8 @@ private:
     Movie m_movie;
     QLabel* m_posterLabel;
     QLabel* m_titleLabel;
-    QLabel* m_yearLabel;
     QLabel* m_ratingLabel;
     QLabel* m_genreLabel;
     QLabel* m_statusLabel;
+    QWidget* m_ratingBadge;
 };

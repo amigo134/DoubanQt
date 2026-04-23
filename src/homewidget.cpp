@@ -59,9 +59,9 @@ void HomeWidget::buildUI()
     bl->setContentsMargins(28, 20, 28, 20);
     bl->setSpacing(4);
     auto* t1 = new QLabel("发现好电影");
-    t1->setStyleSheet("font-size: 22px; font-weight: bold; color: white;");
+    t1->setStyleSheet("font-size: 22px; font-weight: bold; color: white; background: transparent;");
     auto* t2 = new QLabel("WMDB · 豆瓣 · IMDb · 烂番茄 全球影视数据");
-    t2->setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75);");
+    t2->setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75); background: transparent;");
     bl->addWidget(t1);
     bl->addWidget(t2);
     root->addWidget(banner);
@@ -152,7 +152,6 @@ void HomeWidget::rebuildHotSearchRows()
         QLayout* sub = item->layout();
         if (sub) {
             while (QLayoutItem* si = sub->takeAt(0)) delete si;
-            delete sub;
         }
         delete item;
     }
@@ -180,7 +179,6 @@ void HomeWidget::rebuildMyListRows()
         QLayout* sub = item->layout();
         if (sub) {
             while (QLayoutItem* si = sub->takeAt(0)) delete si;
-            delete sub;
         }
         delete item;
     }
@@ -215,7 +213,7 @@ void HomeWidget::refresh()
         m_emptyLabel->setVisible(true);
         while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
             QLayout* sub = item->layout();
-            if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; delete sub; }
+            if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
             delete item;
         }
         m_myListOuterLayout->addWidget(m_emptyLabel);
@@ -227,7 +225,7 @@ void HomeWidget::refresh()
 
     while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
         QLayout* sub = item->layout();
-        if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; delete sub; }
+        if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
         delete item;
     }
 

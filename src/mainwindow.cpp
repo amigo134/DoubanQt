@@ -60,22 +60,38 @@ void MainWindow::buildUI()
     rootLayout->setSpacing(0);
 
     auto* header = new QWidget();
-    header->setFixedHeight(68);
+    header->setFixedHeight(60);
     header->setStyleSheet(R"(
         QWidget {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #00C49A, stop:0.5 #00B386, stop:1 #009A73);
+            background: white;
+            border-bottom: 1px solid #E8E8EC;
         }
     )");
     rootLayout->addWidget(header);
 
     auto* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(28, 0, 28, 0);
-    headerLayout->setSpacing(20);
+    headerLayout->setContentsMargins(32, 0, 32, 0);
+    headerLayout->setSpacing(12);
 
-    auto* logoLabel = new QLabel("🎬 影视");
-    logoLabel->setStyleSheet("font-size: 22px; font-weight: bold; color: white; letter-spacing: 3px;");
+    auto* logoLabel = new QLabel("DOUBAN");
+    logoLabel->setStyleSheet(R"(
+        font-size: 20px;
+        font-weight: 900;
+        color: #00B51D;
+        letter-spacing: 4px;
+        font-family: "Arial Black", "Microsoft YaHei UI";
+    )");
     headerLayout->addWidget(logoLabel);
+
+    auto* dotLabel = new QLabel("MOVIE");
+    dotLabel->setStyleSheet(R"(
+        font-size: 12px;
+        font-weight: bold;
+        color: #999;
+        letter-spacing: 2px;
+        margin-top: 4px;
+    )");
+    headerLayout->addWidget(dotLabel);
 
     m_navHome = new QPushButton("首页");
     m_navSearch = new QPushButton("搜索结果");
@@ -85,17 +101,17 @@ void MainWindow::buildUI()
                 background: %1;
                 color: %2;
                 border: none;
-                border-radius: 18px;
-                padding: 7px 20px;
+                border-radius: 6px;
+                padding: 6px 16px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background: rgba(255,255,255,0.25);
-                color: white;
+                background: #F0F0F2;
+                color: #333;
             }
-        )").arg(active ? "rgba(255,255,255,0.22)" : "transparent")
-           .arg(active ? "white" : "rgba(255,255,255,0.75)");
+        )").arg(active ? "#E8F5E9" : "transparent")
+           .arg(active ? "#00B51D" : "#888");
     };
     m_navHome->setStyleSheet(navStyle(true));
     m_navSearch->setStyleSheet(navStyle(false));
@@ -112,20 +128,25 @@ void MainWindow::buildUI()
     auto* searchContainer = new QFrame();
     searchContainer->setStyleSheet(R"(
         QFrame {
-            background: rgba(255,255,255,0.95);
-            border-radius: 24px;
+            background: #F5F5F7;
+            border: 1px solid #E0E0E4;
+            border-radius: 8px;
+        }
+        QFrame:hover {
+            border-color: #00B51D;
+            background: white;
         }
     )");
-    searchContainer->setFixedHeight(42);
+    searchContainer->setFixedHeight(38);
     searchContainer->setMinimumWidth(280);
-    searchContainer->setMaximumWidth(520);
+    searchContainer->setMaximumWidth(480);
     m_searchContainer = searchContainer;
     auto* searchLayout = new QHBoxLayout(searchContainer);
-    searchLayout->setContentsMargins(16, 0, 4, 0);
-    searchLayout->setSpacing(8);
+    searchLayout->setContentsMargins(12, 0, 4, 0);
+    searchLayout->setSpacing(6);
 
     auto* searchIcon = new QLabel("🔍");
-    searchIcon->setStyleSheet("font-size: 15px; background: transparent;");
+    searchIcon->setStyleSheet("font-size: 14px; background: transparent;");
     searchLayout->addWidget(searchIcon);
 
     m_searchEdit = new QLineEdit();
@@ -134,11 +155,11 @@ void MainWindow::buildUI()
         QLineEdit {
             border: none;
             background: transparent;
-            font-size: 14px;
-            color: #333;
+            font-size: 13px;
+            color: #222;
         }
         QLineEdit::placeholder {
-            color: #AAA;
+            color: #BBB;
         }
     )");
     searchLayout->addWidget(m_searchEdit);
@@ -146,21 +167,19 @@ void MainWindow::buildUI()
     auto* searchBtn = new QPushButton("搜索");
     searchBtn->setStyleSheet(R"(
         QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00C49A, stop:1 #009A73);
+            background: #00B51D;
             color: white;
             border: none;
-            border-radius: 20px;
-            padding: 7px 20px;
-            font-size: 13px;
+            border-radius: 6px;
+            padding: 6px 18px;
+            font-size: 12px;
             font-weight: bold;
         }
         QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00D4AA, stop:1 #00AA83);
+            background: #009A18;
         }
         QPushButton:pressed {
-            background: #008A63;
+            background: #008012;
         }
     )");
     connect(searchBtn, &QPushButton::clicked, this, &MainWindow::onSearch);
@@ -169,8 +188,8 @@ void MainWindow::buildUI()
 
     headerLayout->addWidget(searchContainer);
 
-    m_loadingLabel = new QLabel("⏳ 搜索中...");
-    m_loadingLabel->setStyleSheet("color: rgba(255,255,255,0.85); font-size: 13px; font-weight: bold;");
+    m_loadingLabel = new QLabel("搜索中...");
+    m_loadingLabel->setStyleSheet("color: #999; font-size: 12px;");
     m_loadingLabel->setVisible(false);
     headerLayout->addWidget(m_loadingLabel);
 
@@ -204,11 +223,11 @@ void MainWindow::performSearch(const QString& query, int skip)
         m_navSearch->setVisible(true);
         m_navSearch->setStyleSheet(R"(
             QPushButton {
-                background: rgba(255,255,255,0.22);
-                color: white;
+                background: #E8F5E9;
+                color: #00B51D;
                 border: none;
-                border-radius: 18px;
-                padding: 7px 20px;
+                border-radius: 6px;
+                padding: 6px 16px;
                 font-size: 13px;
                 font-weight: bold;
             }
@@ -261,11 +280,11 @@ void MainWindow::onNavClicked(int index)
     m_stackedWidget->setCurrentIndex(index);
     auto activeStyle = R"(
         QPushButton {
-            background: rgba(255,255,255,0.22);
-            color: white;
+            background: #E8F5E9;
+            color: #00B51D;
             border: none;
-            border-radius: 18px;
-            padding: 7px 20px;
+            border-radius: 6px;
+            padding: 6px 16px;
             font-size: 13px;
             font-weight: bold;
         }
@@ -273,16 +292,16 @@ void MainWindow::onNavClicked(int index)
     auto inactiveStyle = R"(
         QPushButton {
             background: transparent;
-            color: rgba(255,255,255,0.65);
+            color: #888;
             border: none;
-            border-radius: 18px;
-            padding: 7px 20px;
+            border-radius: 6px;
+            padding: 6px 16px;
             font-size: 13px;
             font-weight: bold;
         }
         QPushButton:hover {
-            background: rgba(255,255,255,0.15);
-            color: white;
+            background: #F0F0F2;
+            color: #333;
         }
     )";
     m_navHome->setStyleSheet(index == HOME ? activeStyle : inactiveStyle);
@@ -308,6 +327,6 @@ void MainWindow::updateSearchBoxWidth()
 {
     if (!m_searchContainer) return;
     int windowWidth = width();
-    int searchWidth = qBound(280, windowWidth / 3, 520);
+    int searchWidth = qBound(280, windowWidth / 3, 480);
     m_searchContainer->setFixedWidth(searchWidth);
 }

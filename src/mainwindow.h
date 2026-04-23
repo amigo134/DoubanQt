@@ -4,7 +4,6 @@
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QLabel>
-#include <QComboBox>
 #include <QResizeEvent>
 #include "apimanager.h"
 #include "databasemanager.h"
@@ -32,8 +31,6 @@ private slots:
 
 private:
     void buildUI();
-    void buildHeader(QVBoxLayout* layout);
-    void buildNavBar(QHBoxLayout* layout);
     void performSearch(const QString& query, int skip = 0);
     void updateSearchBoxWidth();
 

@@ -10,53 +10,82 @@
 MovieCard::MovieCard(const Movie& movie, QWidget* parent)
     : QFrame(parent)
 {
-    setFixedSize(170, 285);
+    setFixedSize(170, 290);
     setCursor(Qt::PointingHandCursor);
     setStyleSheet(R"(
         MovieCard {
             background: white;
-            border-radius: 12px;
-            border: 1px solid #ECECEC;
+            border-radius: 10px;
+            border: 1px solid #EEE;
         }
     )");
 
     auto* shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(16);
-    shadow->setColor(QColor(0, 0, 0, 25));
-    shadow->setOffset(0, 4);
+    shadow->setBlurRadius(12);
+    shadow->setColor(QColor(0, 0, 0, 12));
+    shadow->setOffset(0, 2);
     setGraphicsEffect(shadow);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 10);
     layout->setSpacing(4);
 
-    m_posterLabel = new QLabel(this);
-    m_posterLabel->setFixedSize(170, 190);
-    m_posterLabel->setScaledContents(false);
-    m_posterLabel->setAlignment(Qt::AlignCenter);
-    m_posterLabel->setStyleSheet("background: #F0F0F0; border-radius: 12px 12px 0 0;");
-    layout->addWidget(m_posterLabel);
+    auto* posterWrap = new QWidget();
+    posterWrap->setFixedHeight(200);
+    posterWrap->setStyleSheet("background: transparent;");
 
-    m_titleLabel = new QLabel(this);
+    auto* posterLayout = new QVBoxLayout(posterWrap);
+    posterLayout->setContentsMargins(0, 0, 0, 0);
+    posterLayout->setSpacing(0);
+
+    m_posterLabel = new QLabel();
+    m_posterLabel->setFixedHeight(200);
+    m_posterLabel->setAlignment(Qt::AlignCenter);
+    m_posterLabel->setStyleSheet("background: #E8E8EC; border-radius: 10px 10px 0 0;");
+
+    posterLayout->addWidget(m_posterLabel);
+
+    auto* badgeRow = new QHBoxLayout();
+    badgeRow->setContentsMargins(8, -22, 0, 0);
+    badgeRow->setSpacing(0);
+
+    m_ratingBadge = new QWidget();
+    m_ratingBadge->setFixedSize(40, 22);
+    m_ratingBadge->setStyleSheet(R"(
+        QWidget {
+            background: rgba(0,0,0,0.60);
+            border-radius: 4px;
+        }
+    )");
+    auto* badgeLayout = new QHBoxLayout(m_ratingBadge);
+    badgeLayout->setContentsMargins(6, 2, 6, 2);
+    badgeLayout->setSpacing(2);
+    m_ratingLabel = new QLabel();
+    m_ratingLabel->setAlignment(Qt::AlignCenter);
+    m_ratingLabel->setStyleSheet("font-size: 11px; font-weight: bold; color: #FFD700; background: transparent; border: none;");
+    badgeLayout->addWidget(m_ratingLabel);
+
+    badgeRow->addWidget(m_ratingBadge);
+    badgeRow->addStretch();
+    posterLayout->addLayout(badgeRow);
+
+    layout->addWidget(posterWrap);
+
+    m_titleLabel = new QLabel();
     m_titleLabel->setWordWrap(true);
     m_titleLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
-    m_titleLabel->setStyleSheet("font-size: 13px; font-weight: bold; color: #2D2D2D; padding: 0 10px;");
-    m_titleLabel->setMaximumHeight(40);
+    m_titleLabel->setStyleSheet("font-size: 13px; font-weight: bold; color: #222; padding: 0 10px;");
+    m_titleLabel->setMaximumHeight(38);
     layout->addWidget(m_titleLabel);
 
-    m_ratingLabel = new QLabel(this);
-    m_ratingLabel->setAlignment(Qt::AlignCenter);
-    m_ratingLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #FF6000;");
-    layout->addWidget(m_ratingLabel);
-
-    m_genreLabel = new QLabel(this);
+    m_genreLabel = new QLabel();
     m_genreLabel->setAlignment(Qt::AlignCenter);
-    m_genreLabel->setStyleSheet("font-size: 11px; color: #999; padding: 0 6px;");
+    m_genreLabel->setStyleSheet("font-size: 11px; color: #999; padding: 0 8px;");
     layout->addWidget(m_genreLabel);
 
-    m_statusLabel = new QLabel(this);
+    m_statusLabel = new QLabel();
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    m_statusLabel->setStyleSheet("font-size: 11px; color: #00B386; font-weight: bold;");
+    m_statusLabel->setStyleSheet("font-size: 11px; color: #00B51D; font-weight: bold;");
     layout->addWidget(m_statusLabel);
 
     setMovie(movie);
@@ -74,9 +103,9 @@ void MovieCard::setMovie(const Movie& movie)
 
     if (movie.doubanRating > 0) {
         m_ratingLabel->setText(QString::number(movie.doubanRating, 'f', 1));
+        m_ratingBadge->setVisible(true);
     } else {
-        m_ratingLabel->setText("暂无评分");
-        m_ratingLabel->setStyleSheet("font-size: 13px; color: #999;");
+        m_ratingBadge->setVisible(false);
     }
 
     QString genre = movie.getGenre();
@@ -90,22 +119,25 @@ void MovieCard::setMovie(const Movie& movie)
 void MovieCard::loadPoster(const QString& url)
 {
     if (url.isEmpty()) {
-        m_posterLabel->setText("🎬 暂无海报");
-        m_posterLabel->setStyleSheet("background: #F0F0F0; border-radius: 12px 12px 0 0; font-size: 13px; color: #BBB;");
+        m_posterLabel->setText("🎬");
+        m_posterLabel->setStyleSheet("background: #E8E8EC; border-radius: 10px 10px 0 0; font-size: 28px; color: #BBB;");
         return;
     }
 
     ImageCache::instance().loadImage(url, this, [this](const QPixmap& pixmap) {
         if (!pixmap.isNull()) {
-            QPixmap scaled = pixmap.scaled(m_posterLabel->size(),
+            int w = m_posterLabel->width();
+            int h = m_posterLabel->height();
+            if (w <= 0 || h <= 0) { w = 170; h = 200; }
+            QPixmap scaled = pixmap.scaled(w, h,
                                            Qt::KeepAspectRatioByExpanding,
                                            Qt::SmoothTransformation);
-            QPixmap rounded(m_posterLabel->size());
+            QPixmap rounded(w, h);
             rounded.fill(Qt::transparent);
             QPainter p(&rounded);
             p.setRenderHint(QPainter::Antialiasing);
             QPainterPath path;
-            path.addRoundedRect(rounded.rect(), 12, 12);
+            path.addRoundedRect(rounded.rect(), 10, 10);
             p.setClipPath(path);
             int x = (rounded.width() - scaled.width()) / 2;
             int y = (rounded.height() - scaled.height()) / 2;
@@ -142,15 +174,15 @@ void MovieCard::enterEvent(QEvent* event)
     setStyleSheet(R"(
         MovieCard {
             background: white;
-            border-radius: 12px;
-            border: 2px solid #00B386;
+            border-radius: 10px;
+            border: 2px solid #00B51D;
         }
     )");
     auto* shadow = qobject_cast<QGraphicsDropShadowEffect*>(graphicsEffect());
     if (shadow) {
-        shadow->setBlurRadius(24);
-        shadow->setColor(QColor(0, 179, 134, 70));
-        shadow->setOffset(0, 6);
+        shadow->setBlurRadius(16);
+        shadow->setColor(QColor(0, 181, 29, 40));
+        shadow->setOffset(0, 4);
     }
     QFrame::enterEvent(event);
 }
@@ -160,15 +192,15 @@ void MovieCard::leaveEvent(QEvent* event)
     setStyleSheet(R"(
         MovieCard {
             background: white;
-            border-radius: 12px;
-            border: 1px solid #ECECEC;
+            border-radius: 10px;
+            border: 1px solid #EEE;
         }
     )");
     auto* shadow = qobject_cast<QGraphicsDropShadowEffect*>(graphicsEffect());
     if (shadow) {
-        shadow->setBlurRadius(16);
-        shadow->setColor(QColor(0, 0, 0, 25));
-        shadow->setOffset(0, 4);
+        shadow->setBlurRadius(12);
+        shadow->setColor(QColor(0, 0, 0, 12));
+        shadow->setOffset(0, 2);
     }
     QFrame::leaveEvent(event);
 }

@@ -19,74 +19,75 @@ ReviewDialog::ReviewDialog(const Movie& movie, const UserReview& existingReview,
     setMinimumWidth(500);
     setStyleSheet(R"(
         QDialog {
-            background: #FAFAFA;
+            background: #FFFFFF;
         }
         QLabel#titleLabel {
             font-size: 18px;
             font-weight: bold;
-            color: #2D2D2D;
+            color: #222;
         }
         QLabel#sectionLabel {
             font-size: 13px;
-            color: #555;
-            margin-top: 8px;
+            color: #666;
+            margin-top: 10px;
             font-weight: bold;
         }
         QTextEdit {
             border: 1px solid #DDD;
             border-radius: 8px;
-            padding: 10px;
+            padding: 12px;
             font-size: 14px;
-            background: white;
+            background: #FAFAFA;
+            color: #222;
         }
         QTextEdit:focus {
-            border-color: #00B386;
+            border-color: #00B51D;
+            background: white;
         }
         QPushButton#submitBtn {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00C49A, stop:1 #009A73);
+            background: #00B51D;
             color: white;
             border: none;
-            border-radius: 22px;
-            padding: 11px 36px;
+            border-radius: 6px;
+            padding: 10px 36px;
             font-size: 14px;
             font-weight: bold;
         }
         QPushButton#submitBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #00D4AA, stop:1 #00AA83);
+            background: #009A18;
         }
         QPushButton#submitBtn:pressed {
-            background: #008A63;
+            background: #008012;
         }
         QPushButton#cancelBtn {
-            background: #F0F0F0;
-            color: #666;
-            border: none;
-            border-radius: 22px;
-            padding: 11px 28px;
+            background: transparent;
+            color: #888;
+            border: 1px solid #DDD;
+            border-radius: 6px;
+            padding: 10px 28px;
             font-size: 14px;
         }
         QPushButton#cancelBtn:hover {
-            background: #E0E0E0;
+            border-color: #BBB;
+            color: #555;
         }
         QCheckBox {
             font-size: 13px;
             color: #555;
-            spacing: 6px;
+            spacing: 8px;
         }
         QCheckBox::indicator {
             width: 18px;
             height: 18px;
             border-radius: 4px;
-            border: 2px solid #CCC;
+            border: 1px solid #CCC;
         }
         QCheckBox::indicator:checked {
-            background: #00B386;
-            border-color: #00B386;
+            background: #00B51D;
+            border-color: #00B51D;
         }
         QCheckBox::indicator:hover {
-            border-color: #00B386;
+            border-color: #00B51D;
         }
     )");
 
@@ -94,13 +95,16 @@ ReviewDialog::ReviewDialog(const Movie& movie, const UserReview& existingReview,
     mainLayout->setSpacing(14);
     mainLayout->setContentsMargins(28, 28, 28, 28);
 
+    auto* headerRow = new QHBoxLayout();
     auto* titleLabel = new QLabel(movie.getName());
     titleLabel->setObjectName("titleLabel");
-    mainLayout->addWidget(titleLabel);
+    headerRow->addWidget(titleLabel);
+    headerRow->addStretch();
+    mainLayout->addLayout(headerRow);
 
     auto* line = new QFrame();
     line->setFrameShape(QFrame::HLine);
-    line->setStyleSheet("color: #ECECEC;");
+    line->setStyleSheet("color: #EEE;");
     mainLayout->addWidget(line);
 
     auto* ratingSection = new QLabel("⭐ 我的评分");
@@ -113,7 +117,7 @@ ReviewDialog::ReviewDialog(const Movie& movie, const UserReview& existingReview,
     m_ratingWidget->setRating(existingReview.rating);
 
     m_ratingLabel = new QLabel();
-    m_ratingLabel->setStyleSheet("font-size: 14px; color: #00B386; font-weight: bold; margin-left: 8px;");
+    m_ratingLabel->setStyleSheet("font-size: 14px; color: #00B51D; font-weight: bold; margin-left: 12px;");
     updateRatingLabel(existingReview.rating);
 
     ratingLayout->addWidget(m_ratingWidget);
@@ -151,6 +155,8 @@ ReviewDialog::ReviewDialog(const Movie& movie, const UserReview& existingReview,
     statusLayout->addStretch();
     mainLayout->addLayout(statusLayout);
 
+    mainLayout->addSpacing(6);
+
     auto* btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     auto* cancelBtn = new QPushButton("取消");
@@ -162,6 +168,7 @@ ReviewDialog::ReviewDialog(const Movie& movie, const UserReview& existingReview,
     connect(submitBtn, &QPushButton::clicked, this, &QDialog::accept);
 
     btnLayout->addWidget(cancelBtn);
+    btnLayout->addSpacing(10);
     btnLayout->addWidget(submitBtn);
     mainLayout->addLayout(btnLayout);
 }
