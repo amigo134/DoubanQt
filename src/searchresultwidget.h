@@ -3,7 +3,8 @@
 #include <QScrollArea>
 #include <QLabel>
 #include <QPushButton>
-#include <QGridLayout>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QResizeEvent>
 #include "moviemodel.h"
 #include "moviecard.h"
@@ -34,14 +35,13 @@ private:
 
     QScrollArea* m_scrollArea;
     QWidget* m_gridContainer;
-    QGridLayout* m_gridLayout;
+    QVBoxLayout* m_outerLayout;
     QLabel* m_statusLabel;
     QPushButton* m_loadMoreBtn;
     QLabel* m_totalLabel;
 
     int m_currentSkip = 0;
     SearchResult m_lastResult;
-    int m_col = 0;
     int m_row = 0;
     QList<Movie> m_allMovies;
     static constexpr int CARD_WIDTH = 170;

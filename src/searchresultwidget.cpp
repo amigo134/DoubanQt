@@ -1,7 +1,6 @@
 #include "searchresultwidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QSizePolicy>
 #include <QScrollBar>
 
 SearchResultWidget::SearchResultWidget(QWidget* parent)
@@ -33,25 +32,18 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
         QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.25); }
     )");
 
-    auto* scrollContent = new QWidget();
-    scrollContent->setStyleSheet("background: #F5F6F8;");
-    m_scrollArea->setWidget(scrollContent);
-
-    auto* scrollLayout = new QVBoxLayout(scrollContent);
-    scrollLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
-    scrollLayout->setSpacing(GRID_SPACING);
-
     m_gridContainer = new QWidget();
-    m_gridContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_gridLayout = new QGridLayout(m_gridContainer);
-    m_gridLayout->setSpacing(GRID_SPACING);
-    m_gridLayout->setContentsMargins(0, 0, 0, 0);
-    scrollLayout->addWidget(m_gridContainer, 1);
+    m_gridContainer->setStyleSheet("background: #F5F6F8;");
+    m_scrollArea->setWidget(m_gridContainer);
+
+    m_outerLayout = new QVBoxLayout(m_gridContainer);
+    m_outerLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
+    m_outerLayout->setSpacing(GRID_SPACING);
+    m_outerLayout->addStretch();
 
     m_statusLabel = new QLabel();
     m_statusLabel->setAlignment(Qt::AlignCenter);
     m_statusLabel->setStyleSheet("font-size: 14px; color: #999; padding: 48px;");
-    scrollLayout->addWidget(m_statusLabel);
 
     m_loadMoreBtn = new QPushButton("加载更多");
     m_loadMoreBtn->setStyleSheet(R"(
@@ -77,22 +69,14 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
         emit loadMoreRequested(m_currentSkip);
     });
 
-    auto* loadMoreContainer = new QWidget();
-    auto* loadMoreLayout = new QHBoxLayout(loadMoreContainer);
-    loadMoreLayout->addStretch();
-    loadMoreLayout->addWidget(m_loadMoreBtn);
-    loadMoreLayout->addStretch();
-    scrollLayout->addWidget(loadMoreContainer);
-    scrollLayout->addStretch();
-
     mainLayout->addWidget(m_scrollArea);
 }
 
 int SearchResultWidget::calculateColumns() const
 {
-    int availableWidth = m_gridContainer->width();
-    if (availableWidth <= 0) availableWidth = width() - 2 * MARGIN;
-    int cols = (availableWidth + GRID_SPACING) / (CARD_WIDTH + GRID_SPACING);
+    int availableWidth = m_scrollArea->viewport()->width() - 2 * MARGIN;
+    if (availableWidth <= 0) availableWidth = 800;
+    int cols = availableWidth / (CARD_WIDTH + GRID_SPACING);
     return qMax(1, cols);
 }
 
@@ -104,23 +88,43 @@ void SearchResultWidget::resizeEvent(QResizeEvent* event)
 
 void SearchResultWidget::clearCards()
 {
-    while (QLayoutItem* item = m_gridLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
+    while (QLayoutItem* item = m_outerLayout->takeAt(0)) {
+        QWidget* w = item->widget();
+        if (w) w->deleteLater();
         delete item;
     }
-    m_col = 0;
     m_row = 0;
 }
 
 void SearchResultWidget::addMovieCard(const Movie& movie)
 {
+    int cols = calculateColumns();
+    QHBoxLayout* rowLayout = nullptr;
+
+    if (m_row == 0 || m_outerLayout->count() == 0) {
+        rowLayout = new QHBoxLayout();
+        rowLayout->setSpacing(GRID_SPACING);
+        m_outerLayout->insertLayout(m_outerLayout->count() - 1, rowLayout);
+        m_row++;
+    } else {
+        QLayoutItem* lastItem = m_outerLayout->itemAt(m_outerLayout->count() - 2);
+        if (lastItem && lastItem->layout()) {
+            rowLayout = qobject_cast<QHBoxLayout*>(lastItem->layout());
+        }
+        if (!rowLayout) {
+            rowLayout = new QHBoxLayout();
+            rowLayout->setSpacing(GRID_SPACING);
+            m_outerLayout->insertLayout(m_outerLayout->count() - 1, rowLayout);
+            m_row++;
+        }
+    }
+
     auto* card = new MovieCard(movie, m_gridContainer);
     connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
-    int cols = calculateColumns();
-    m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
-    m_col++;
-    if (m_col >= cols) {
-        m_col = 0;
+    rowLayout->addWidget(card);
+
+    if (rowLayout->count() >= cols) {
+        rowLayout->addStretch();
         m_row++;
     }
 }
@@ -129,27 +133,44 @@ void SearchResultWidget::rearrangeCards()
 {
     if (m_allMovies.isEmpty()) return;
 
-    while (QLayoutItem* item = m_gridLayout->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
+    while (QLayoutItem* item = m_outerLayout->takeAt(0)) {
+        QWidget* w = item->widget();
+        if (w) w->deleteLater();
         delete item;
     }
-    m_col = 0;
     m_row = 0;
 
     int cols = calculateColumns();
-    for (const Movie& movie : m_allMovies) {
-        auto* card = new MovieCard(movie, m_gridContainer);
+    QHBoxLayout* rowLayout = nullptr;
+
+    for (int i = 0; i < m_allMovies.size(); ++i) {
+        if (i % cols == 0) {
+            rowLayout = new QHBoxLayout();
+            rowLayout->setSpacing(GRID_SPACING);
+            m_outerLayout->insertLayout(m_outerLayout->count(), rowLayout);
+        }
+
+        auto* card = new MovieCard(m_allMovies[i], m_gridContainer);
         connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
-        m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
-        m_col++;
-        if (m_col >= cols) {
-            m_col = 0;
-            m_row++;
+        rowLayout->addWidget(card);
+
+        if ((i % cols == cols - 1) || (i == m_allMovies.size() - 1)) {
+            rowLayout->addStretch();
         }
     }
 
-    for (int c = 0; c < cols; ++c) {
-        m_gridLayout->setColumnStretch(c, 1);
+    m_outerLayout->addStretch();
+
+    if (m_loadMoreBtn->isVisible()) {
+        auto* loadMoreLayout = new QHBoxLayout();
+        loadMoreLayout->addStretch();
+        loadMoreLayout->addWidget(m_loadMoreBtn);
+        loadMoreLayout->addStretch();
+        m_outerLayout->addLayout(loadMoreLayout);
+    }
+
+    if (m_statusLabel->isVisible()) {
+        m_outerLayout->insertWidget(0, m_statusLabel);
     }
 }
 
@@ -168,23 +189,16 @@ void SearchResultWidget::setResults(const SearchResult& result)
 
     m_totalLabel->setText(QString("共找到 %1 部作品").arg(result.total));
 
-    int cols = calculateColumns();
-    for (const Movie& movie : result.movies) {
-        auto* card = new MovieCard(movie, m_gridContainer);
-        connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
-        m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
-        m_col++;
-        if (m_col >= cols) {
-            m_col = 0;
-            m_row++;
-        }
-    }
-
-    for (int c = 0; c < cols; ++c) {
-        m_gridLayout->setColumnStretch(c, 1);
-    }
+    rearrangeCards();
 
     m_loadMoreBtn->setVisible(result.hasMore);
+    if (result.hasMore) {
+        auto* loadMoreLayout = new QHBoxLayout();
+        loadMoreLayout->addStretch();
+        loadMoreLayout->addWidget(m_loadMoreBtn);
+        loadMoreLayout->addStretch();
+        m_outerLayout->addLayout(loadMoreLayout);
+    }
 }
 
 void SearchResultWidget::appendResults(const SearchResult& result)
@@ -193,9 +207,7 @@ void SearchResultWidget::appendResults(const SearchResult& result)
     m_currentSkip = result.skip + result.count;
     m_allMovies.append(result.movies);
 
-    for (const Movie& movie : result.movies) {
-        addMovieCard(movie);
-    }
+    rearrangeCards();
 
     m_loadMoreBtn->setVisible(result.hasMore);
 }
@@ -208,6 +220,7 @@ void SearchResultWidget::showLoading(bool show)
         m_loadMoreBtn->setVisible(false);
         clearCards();
         m_allMovies.clear();
+        m_outerLayout->insertWidget(0, m_statusLabel);
     } else {
         m_statusLabel->setVisible(false);
     }
@@ -219,6 +232,7 @@ void SearchResultWidget::showEmpty()
     m_statusLabel->setVisible(true);
     m_totalLabel->setText("");
     m_loadMoreBtn->setVisible(false);
+    m_outerLayout->insertWidget(0, m_statusLabel);
 }
 
 void SearchResultWidget::showError(const QString& error)
@@ -228,4 +242,5 @@ void SearchResultWidget::showError(const QString& error)
     m_statusLabel->setVisible(true);
     m_totalLabel->setText("");
     m_loadMoreBtn->setVisible(false);
+    m_outerLayout->insertWidget(0, m_statusLabel);
 }
