@@ -3,8 +3,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QGridLayout>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QResizeEvent>
 #include <QTimer>
 #include "moviemodel.h"
@@ -26,32 +26,30 @@ protected:
 
 private:
     void buildUI();
-    void rearrangeHotSearch();
-    void rearrangeMyList();
-    int calculateHotSearchColumns() const;
-    int calculateMyListColumns() const;
+    void rebuildHotSearchRows();
+    void rebuildMyListRows();
+    int calcHotSearchCols() const;
+    int calcMyListCols() const;
 
     DatabaseManager* m_db;
     QTimer* m_resizeTimer;
 
     QWidget* m_hotSearchWrap;
-    QGridLayout* m_hotSearchGrid;
-    QList<QPushButton*> m_hotSearchBtns;
-    int m_hotSearchCols = 0;
+    QVBoxLayout* m_hotSearchOuterLayout;
+    QList<QPushButton*> m_hotBtns;
+    int m_hotCols = 0;
 
     QWidget* m_myListWrap;
-    QGridLayout* m_myListGrid;
+    QVBoxLayout* m_myListOuterLayout;
     QLabel* m_emptyLabel;
     QList<QFrame*> m_myCards;
-    int m_myListCols = 0;
+    int m_myCols = 0;
 
     QList<UserReview> m_watchedData;
 
     static const QStringList HOT_SEARCHES;
-    static constexpr int MY_CARD_WIDTH = 110;
-    static constexpr int MY_CARD_HEIGHT = 140;
-    static constexpr int MY_CARD_SPACING = 14;
-    static constexpr int MY_MARGIN = 20;
-    static constexpr int HOT_MARGIN = 20;
-    static constexpr int HOT_SPACING = 12;
+    static constexpr int MY_CARD_W = 110;
+    static constexpr int MY_CARD_H = 140;
+    static constexpr int MARGIN = 20;
+    static constexpr int SPACING = 12;
 };

@@ -1,11 +1,7 @@
 #include "homewidget.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QScrollArea>
-#include <QPushButton>
 #include <QScrollBar>
 #include <QFrame>
-#include <QLabel>
 
 const QStringList HomeWidget::HOT_SEARCHES = {
     "流浪地球", "哪吒", "长津湖", "封神", "满江红",
@@ -23,8 +19,8 @@ HomeWidget::HomeWidget(DatabaseManager* db, QWidget* parent)
     m_resizeTimer->setSingleShot(true);
     m_resizeTimer->setInterval(200);
     connect(m_resizeTimer, &QTimer::timeout, this, [this]() {
-        rearrangeHotSearch();
-        rearrangeMyList();
+        rebuildHotSearchRows();
+        rebuildMyListRows();
     });
 }
 
@@ -32,149 +28,115 @@ void HomeWidget::buildUI()
 {
     setStyleSheet("background: #F5F6F8;");
 
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->verticalScrollBar()->setStyleSheet(R"(
-        QScrollBar:vertical { width: 8px; background: transparent; }
-        QScrollBar::handle:vertical { background: rgba(0,0,0,0.15); border-radius: 4px; }
-        QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.25); }
+    auto* scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->verticalScrollBar()->setStyleSheet(R"(
+        QScrollBar:vertical { width: 6px; background: transparent; }
+        QScrollBar::handle:vertical { background: rgba(0,0,0,0.12); border-radius: 3px; }
     )");
 
     auto* content = new QWidget();
     content->setStyleSheet("background: #F5F6F8;");
-    scrollArea->setWidget(content);
+    scroll->setWidget(content);
 
-    auto* mainLayout = new QVBoxLayout(content);
-    mainLayout->setContentsMargins(28, 24, 28, 24);
-    mainLayout->setSpacing(20);
+    auto* root = new QVBoxLayout(content);
+    root->setContentsMargins(24, 20, 24, 20);
+    root->setSpacing(18);
 
     auto* banner = new QFrame();
     banner->setObjectName("banner");
     banner->setStyleSheet(R"(
         QFrame#banner {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #00C49A, stop:0.5 #00B386, stop:1 #009A73);
-            border-radius: 14px;
+                stop:0 #00C49A, stop:1 #009A73);
+            border-radius: 12px;
         }
     )");
-    banner->setFixedHeight(140);
-    auto* bannerLayout = new QVBoxLayout(banner);
-    bannerLayout->setContentsMargins(32, 24, 32, 24);
-    bannerLayout->setSpacing(6);
-
-    auto* bannerTitle = new QLabel("发现好电影");
-    bannerTitle->setStyleSheet("font-size: 26px; font-weight: bold; color: white; letter-spacing: 2px;");
-
-    auto* bannerSub = new QLabel("接入 WMDB · 豆瓣 · IMDb · 烂番茄 全球影视数据");
-    bannerSub->setStyleSheet("font-size: 13px; color: rgba(255,255,255,0.8);");
-
-    auto* bannerHint = new QLabel("在上方搜索框输入关键词开始探索");
-    bannerHint->setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.55);");
-
-    bannerLayout->addWidget(bannerTitle);
-    bannerLayout->addWidget(bannerSub);
-    bannerLayout->addWidget(bannerHint);
-    mainLayout->addWidget(banner);
+    banner->setFixedHeight(120);
+    auto* bl = new QVBoxLayout(banner);
+    bl->setContentsMargins(28, 20, 28, 20);
+    bl->setSpacing(4);
+    auto* t1 = new QLabel("发现好电影");
+    t1->setStyleSheet("font-size: 22px; font-weight: bold; color: white;");
+    auto* t2 = new QLabel("WMDB · 豆瓣 · IMDb · 烂番茄 全球影视数据");
+    t2->setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75);");
+    bl->addWidget(t1);
+    bl->addWidget(t2);
+    root->addWidget(banner);
 
     auto* hotTitle = new QLabel("热门搜索");
-    hotTitle->setStyleSheet(R"(
-        font-size: 16px;
-        font-weight: bold;
-        color: #2D2D2D;
-        border-left: 3px solid #00B386;
-        padding-left: 10px;
-    )");
-    mainLayout->addWidget(hotTitle);
+    hotTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #00B386; padding-left: 8px;");
+    root->addWidget(hotTitle);
 
     m_hotSearchWrap = new QWidget();
-    m_hotSearchWrap->setStyleSheet("background: white; border-radius: 12px;");
-    m_hotSearchGrid = new QGridLayout(m_hotSearchWrap);
-    m_hotSearchGrid->setContentsMargins(HOT_MARGIN, HOT_MARGIN, HOT_MARGIN, HOT_MARGIN);
-    m_hotSearchGrid->setSpacing(HOT_SPACING);
-    m_hotSearchGrid->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    m_hotSearchWrap->setStyleSheet("background: white; border-radius: 10px;");
+    m_hotSearchOuterLayout = new QVBoxLayout(m_hotSearchWrap);
+    m_hotSearchOuterLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
+    m_hotSearchOuterLayout->setSpacing(SPACING);
 
-    for (const QString& keyword : HOT_SEARCHES) {
-        auto* btn = new QPushButton(keyword);
+    for (const QString& kw : HOT_SEARCHES) {
+        auto* btn = new QPushButton(kw);
         btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
         btn->setStyleSheet(R"(
             QPushButton {
-                background: #F0FBF7;
-                color: #00A370;
-                border: 1px solid #B8E8D8;
-                border-radius: 14px;
-                padding: 6px 14px;
-                font-size: 13px;
+                background: #F0FBF7; color: #00A370;
+                border: 1px solid #B8E8D8; border-radius: 14px;
+                padding: 5px 14px; font-size: 13px;
             }
-            QPushButton:hover {
-                background: #00B386;
-                color: white;
-                border-color: #00B386;
-            }
-            QPushButton:pressed {
-                background: #008A63;
-                color: white;
-                border-color: #008A63;
-            }
+            QPushButton:hover { background: #00B386; color: white; border-color: #00B386; }
+            QPushButton:pressed { background: #008A63; color: white; }
         )");
-        connect(btn, &QPushButton::clicked, this, [this, keyword]() {
-            emit movieSearchRequested(keyword);
+        connect(btn, &QPushButton::clicked, this, [this, kw]() {
+            emit movieSearchRequested(kw);
         });
-        m_hotSearchBtns.append(btn);
+        m_hotBtns.append(btn);
     }
 
-    rearrangeHotSearch();
-    mainLayout->addWidget(m_hotSearchWrap);
+    rebuildHotSearchRows();
+    root->addWidget(m_hotSearchWrap);
 
     auto* myListTitle = new QLabel("我看过的");
-    myListTitle->setStyleSheet(R"(
-        font-size: 16px;
-        font-weight: bold;
-        color: #2D2D2D;
-        border-left: 3px solid #FF6000;
-        padding-left: 10px;
-    )");
-    mainLayout->addWidget(myListTitle);
+    myListTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #FF6000; padding-left: 8px;");
+    root->addWidget(myListTitle);
 
     m_myListWrap = new QWidget();
-    m_myListWrap->setStyleSheet("background: white; border-radius: 12px;");
-    m_myListGrid = new QGridLayout(m_myListWrap);
-    m_myListGrid->setContentsMargins(MY_MARGIN, MY_MARGIN, MY_MARGIN, MY_MARGIN);
-    m_myListGrid->setSpacing(MY_CARD_SPACING);
-    m_myListGrid->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    m_myListWrap->setStyleSheet("background: white; border-radius: 10px;");
+    m_myListOuterLayout = new QVBoxLayout(m_myListWrap);
+    m_myListOuterLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
+    m_myListOuterLayout->setSpacing(SPACING);
 
     m_emptyLabel = new QLabel("还没有观影记录\n去搜索你喜欢的电影吧");
     m_emptyLabel->setAlignment(Qt::AlignCenter);
-    m_emptyLabel->setStyleSheet("font-size: 13px; color: #BBB; padding: 40px;");
-    m_myListGrid->addWidget(m_emptyLabel, 0, 0, 1, 1, Qt::AlignCenter);
+    m_emptyLabel->setStyleSheet("font-size: 13px; color: #BBB; padding: 36px;");
+    m_myListOuterLayout->addWidget(m_emptyLabel);
 
-    mainLayout->addWidget(m_myListWrap);
+    root->addWidget(m_myListWrap);
+    root->addStretch();
 
-    mainLayout->addStretch();
-
-    auto* outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(scrollArea);
+    auto* outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->addWidget(scroll);
 }
 
-int HomeWidget::calculateHotSearchColumns() const
+int HomeWidget::calcHotSearchCols() const
 {
-    int availableWidth = m_hotSearchWrap->width() - 2 * HOT_MARGIN;
-    if (availableWidth <= 0) availableWidth = 800;
-    int cols = availableWidth / (100 + HOT_SPACING);
-    int remaining = availableWidth - cols * (100 + HOT_SPACING) + HOT_SPACING;
-    if (remaining >= 100) cols++;
+    int w = m_hotSearchWrap->width() - 2 * MARGIN;
+    if (w <= 0) w = 800;
+    int cols = w / (100 + SPACING);
+    int rem = w - cols * (100 + SPACING) + SPACING;
+    if (rem >= 100) cols++;
     return qMax(1, qMin(cols, 7));
 }
 
-int HomeWidget::calculateMyListColumns() const
+int HomeWidget::calcMyListCols() const
 {
-    int availableWidth = m_myListWrap->width() - 2 * MY_MARGIN;
-    if (availableWidth <= 0) availableWidth = 800;
-    int cols = availableWidth / (MY_CARD_WIDTH + MY_CARD_SPACING);
-    int remaining = availableWidth - cols * (MY_CARD_WIDTH + MY_CARD_SPACING) + MY_CARD_SPACING;
-    if (remaining >= MY_CARD_WIDTH) cols++;
+    int w = m_myListWrap->width() - 2 * MARGIN;
+    if (w <= 0) w = 800;
+    int cols = w / (MY_CARD_W + SPACING);
+    int rem = w - cols * (MY_CARD_W + SPACING) + SPACING;
+    if (rem >= MY_CARD_W) cols++;
     return qMax(1, cols);
 }
 
@@ -184,116 +146,134 @@ void HomeWidget::resizeEvent(QResizeEvent* event)
     m_resizeTimer->start();
 }
 
-void HomeWidget::rearrangeHotSearch()
+void HomeWidget::rebuildHotSearchRows()
 {
-    for (auto* btn : m_hotSearchBtns) {
-        m_hotSearchGrid->removeWidget(btn);
-    }
-
-    int cols = calculateHotSearchColumns();
-    if (cols == m_hotSearchCols) {
-        for (auto* btn : m_hotSearchBtns) {
-            m_hotSearchGrid->addWidget(btn);
+    while (QLayoutItem* item = m_hotSearchOuterLayout->takeAt(0)) {
+        QLayout* sub = item->layout();
+        if (sub) {
+            while (QLayoutItem* si = sub->takeAt(0)) delete si;
+            delete sub;
         }
-        return;
+        delete item;
     }
-    m_hotSearchCols = cols;
 
-    for (int i = 0; i < m_hotSearchBtns.size(); ++i) {
-        int row = i / cols;
-        int col = i % cols;
-        m_hotSearchGrid->addWidget(m_hotSearchBtns[i], row, col);
+    int cols = calcHotSearchCols();
+    m_hotCols = cols;
+
+    QHBoxLayout* row = nullptr;
+    for (int i = 0; i < m_hotBtns.size(); ++i) {
+        if (i % cols == 0) {
+            row = new QHBoxLayout();
+            row->setSpacing(SPACING);
+            row->setAlignment(Qt::AlignLeft);
+            m_hotSearchOuterLayout->addLayout(row);
+        }
+        row->addWidget(m_hotBtns[i]);
     }
 }
 
-void HomeWidget::rearrangeMyList()
+void HomeWidget::rebuildMyListRows()
 {
-    if (m_watchedData.isEmpty()) return;
+    if (m_myCards.isEmpty()) return;
 
-    for (auto* card : m_myCards) {
-        m_myListGrid->removeWidget(card);
-    }
-
-    int cols = calculateMyListColumns();
-    if (cols == m_myListCols) {
-        for (int i = 0; i < m_myCards.size(); ++i) {
-            int row = i / cols;
-            int col = i % cols;
-            m_myListGrid->addWidget(m_myCards[i], row, col);
+    while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
+        QLayout* sub = item->layout();
+        if (sub) {
+            while (QLayoutItem* si = sub->takeAt(0)) delete si;
+            delete sub;
         }
-        return;
+        delete item;
     }
-    m_myListCols = cols;
 
+    int cols = calcMyListCols();
+    m_myCols = cols;
+
+    QHBoxLayout* row = nullptr;
     for (int i = 0; i < m_myCards.size(); ++i) {
-        int row = i / cols;
-        int col = i % cols;
-        m_myListGrid->addWidget(m_myCards[i], row, col);
+        if (i % cols == 0) {
+            row = new QHBoxLayout();
+            row->setSpacing(SPACING);
+            row->setAlignment(Qt::AlignLeft);
+            m_myListOuterLayout->addLayout(row);
+        }
+        row->addWidget(m_myCards[i]);
     }
 }
 
 void HomeWidget::refresh()
 {
     for (auto* card : m_myCards) {
-        m_myListGrid->removeWidget(card);
+        m_myListOuterLayout->removeWidget(card);
         delete card;
     }
     m_myCards.clear();
-    m_myListCols = 0;
+    m_myCols = 0;
 
     m_watchedData = m_db->getWatchedList();
 
     if (m_watchedData.isEmpty()) {
         m_emptyLabel->setVisible(true);
-        m_myListGrid->addWidget(m_emptyLabel, 0, 0, 1, 1, Qt::AlignCenter);
+        while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
+            QLayout* sub = item->layout();
+            if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; delete sub; }
+            delete item;
+        }
+        m_myListOuterLayout->addWidget(m_emptyLabel);
         return;
     }
 
     m_emptyLabel->setVisible(false);
-    m_myListGrid->removeWidget(m_emptyLabel);
+    m_myListOuterLayout->removeWidget(m_emptyLabel);
 
-    int cols = calculateMyListColumns();
-    m_myListCols = cols;
+    while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
+        QLayout* sub = item->layout();
+        if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; delete sub; }
+        delete item;
+    }
+
+    int cols = calcMyListCols();
+    m_myCols = cols;
     int maxItems = cols * 2;
 
+    QHBoxLayout* row = nullptr;
     for (int i = 0; i < qMin(m_watchedData.size(), maxItems); ++i) {
         const UserReview& r = m_watchedData[i];
         auto* card = new QFrame(m_myListWrap);
-        card->setFixedSize(MY_CARD_WIDTH, MY_CARD_HEIGHT);
+        card->setFixedSize(MY_CARD_W, MY_CARD_H);
         card->setStyleSheet(R"(
             QFrame {
-                background: white;
-                border-radius: 10px;
+                background: white; border-radius: 8px;
                 border: 1px solid #E8E8E8;
             }
-            QFrame:hover {
-                border-color: #00B386;
-                background: #F0FBF7;
-            }
+            QFrame:hover { border-color: #00B386; background: #F0FBF7; }
         )");
         card->setCursor(Qt::PointingHandCursor);
 
-        auto* cardLayout = new QVBoxLayout(card);
-        cardLayout->setContentsMargins(8, 10, 8, 10);
-        cardLayout->setSpacing(6);
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(6, 8, 6, 8);
+        cl->setSpacing(4);
 
-        auto* nameLabel = new QLabel(r.movieName.left(8) + (r.movieName.length() > 8 ? "..." : ""));
-        nameLabel->setAlignment(Qt::AlignCenter);
-        nameLabel->setWordWrap(true);
-        nameLabel->setStyleSheet("font-size: 12px; color: #333; font-weight: bold;");
+        auto* nm = new QLabel(r.movieName.left(8) + (r.movieName.length() > 8 ? "..." : ""));
+        nm->setAlignment(Qt::AlignCenter);
+        nm->setWordWrap(true);
+        nm->setStyleSheet("font-size: 12px; color: #333; font-weight: bold;");
 
-        auto* ratingLabel = new QLabel(r.rating > 0 ? QString("⭐ %1").arg(r.rating, 0, 'f', 1) : "✓ 看过");
-        ratingLabel->setAlignment(Qt::AlignCenter);
-        ratingLabel->setStyleSheet("font-size: 12px; color: #FF6000; font-weight: bold;");
+        auto* rt = new QLabel(r.rating > 0 ? QString("⭐ %1").arg(r.rating, 0, 'f', 1) : "✓ 看过");
+        rt->setAlignment(Qt::AlignCenter);
+        rt->setStyleSheet("font-size: 11px; color: #FF6000; font-weight: bold;");
 
-        cardLayout->addStretch();
-        cardLayout->addWidget(nameLabel);
-        cardLayout->addWidget(ratingLabel);
+        cl->addStretch();
+        cl->addWidget(nm);
+        cl->addWidget(rt);
 
         m_myCards.append(card);
 
-        int row = i / cols;
-        int col = i % cols;
-        m_myListGrid->addWidget(card, row, col);
+        if (i % cols == 0) {
+            row = new QHBoxLayout();
+            row->setSpacing(SPACING);
+            row->setAlignment(Qt::AlignLeft);
+            m_myListOuterLayout->addLayout(row);
+        }
+        row->addWidget(card);
     }
 }
