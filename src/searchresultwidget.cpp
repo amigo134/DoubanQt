@@ -1,6 +1,7 @@
 #include "searchresultwidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QSizePolicy>
 #include <QScrollBar>
 
 SearchResultWidget::SearchResultWidget(QWidget* parent)
@@ -41,10 +42,11 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
     scrollLayout->setSpacing(GRID_SPACING);
 
     m_gridContainer = new QWidget();
+    m_gridContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_gridLayout = new QGridLayout(m_gridContainer);
     m_gridLayout->setSpacing(GRID_SPACING);
-    m_gridLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    scrollLayout->addWidget(m_gridContainer);
+    m_gridLayout->setContentsMargins(0, 0, 0, 0);
+    scrollLayout->addWidget(m_gridContainer, 1);
 
     m_statusLabel = new QLabel();
     m_statusLabel->setAlignment(Qt::AlignCenter);
@@ -114,9 +116,10 @@ void SearchResultWidget::addMovieCard(const Movie& movie)
 {
     auto* card = new MovieCard(movie, m_gridContainer);
     connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
+    int cols = calculateColumns();
     m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
     m_col++;
-    if (m_col >= calculateColumns()) {
+    if (m_col >= cols) {
         m_col = 0;
         m_row++;
     }
@@ -144,6 +147,10 @@ void SearchResultWidget::rearrangeCards()
             m_row++;
         }
     }
+
+    for (int c = 0; c < cols; ++c) {
+        m_gridLayout->setColumnStretch(c, 1);
+    }
 }
 
 void SearchResultWidget::setResults(const SearchResult& result)
@@ -161,8 +168,20 @@ void SearchResultWidget::setResults(const SearchResult& result)
 
     m_totalLabel->setText(QString("共找到 %1 部作品").arg(result.total));
 
+    int cols = calculateColumns();
     for (const Movie& movie : result.movies) {
-        addMovieCard(movie);
+        auto* card = new MovieCard(movie, m_gridContainer);
+        connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
+        m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
+        m_col++;
+        if (m_col >= cols) {
+            m_col = 0;
+            m_row++;
+        }
+    }
+
+    for (int c = 0; c < cols; ++c) {
+        m_gridLayout->setColumnStretch(c, 1);
     }
 
     m_loadMoreBtn->setVisible(result.hasMore);
