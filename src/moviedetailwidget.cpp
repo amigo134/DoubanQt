@@ -232,11 +232,24 @@ void MovieDetailWidget::buildUI()
     m_wishBtn = new QPushButton("♡ 想看");
     m_wishBtn->setObjectName("wishBtn");
     m_wishBtn->setCheckable(true);
+    m_wishBtn->setStyleSheet(R"(
+        QPushButton { background: #FFF5F5; color: #E74C3C; border: 1px solid #FFD4D4; border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: bold; }
+        QPushButton:checked, QPushButton:hover { background: #E74C3C; color: white; border-color: #E74C3C; }
+    )");
     m_watchedBtn = new QPushButton("✓ 看过");
     m_watchedBtn->setObjectName("watchedBtn");
     m_watchedBtn->setCheckable(true);
+    m_watchedBtn->setStyleSheet(R"(
+        QPushButton { background: #F0FFF0; color: #00B51D; border: 1px solid #B8E6B8; border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: bold; }
+        QPushButton:checked, QPushButton:hover { background: #00B51D; color: white; border-color: #00B51D; }
+    )");
     m_reviewBtn = new QPushButton("✏ 写短评");
     m_reviewBtn->setObjectName("reviewBtn");
+    m_reviewBtn->setStyleSheet(R"(
+        QPushButton { background: #00B51D; color: white; border: none; border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }
+        QPushButton:hover { background: #009A18; }
+        QPushButton:pressed { background: #008012; }
+    )");
 
     connect(m_wishBtn, &QPushButton::clicked, this, &MovieDetailWidget::onToggleWish);
     connect(m_watchedBtn, &QPushButton::clicked, this, &MovieDetailWidget::onToggleWatched);
