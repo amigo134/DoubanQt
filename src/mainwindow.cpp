@@ -117,7 +117,9 @@ void MainWindow::buildUI()
         }
     )");
     searchContainer->setFixedHeight(42);
-    searchContainer->setFixedWidth(400);
+    searchContainer->setMinimumWidth(280);
+    searchContainer->setMaximumWidth(520);
+    m_searchContainer = searchContainer;
     auto* searchLayout = new QHBoxLayout(searchContainer);
     searchLayout->setContentsMargins(16, 0, 4, 0);
     searchLayout->setSpacing(8);
@@ -294,4 +296,18 @@ void MainWindow::onNavClicked(int index)
 void MainWindow::onNetworkBusy(bool busy)
 {
     m_loadingLabel->setVisible(busy);
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    updateSearchBoxWidth();
+}
+
+void MainWindow::updateSearchBoxWidth()
+{
+    if (!m_searchContainer) return;
+    int windowWidth = width();
+    int searchWidth = qBound(280, windowWidth / 3, 520);
+    m_searchContainer->setFixedWidth(searchWidth);
 }

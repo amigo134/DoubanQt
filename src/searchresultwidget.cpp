@@ -37,12 +37,12 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
     m_scrollArea->setWidget(scrollContent);
 
     auto* scrollLayout = new QVBoxLayout(scrollContent);
-    scrollLayout->setContentsMargins(24, 24, 24, 24);
-    scrollLayout->setSpacing(18);
+    scrollLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
+    scrollLayout->setSpacing(GRID_SPACING);
 
     m_gridContainer = new QWidget();
     m_gridLayout = new QGridLayout(m_gridContainer);
-    m_gridLayout->setSpacing(18);
+    m_gridLayout->setSpacing(GRID_SPACING);
     m_gridLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     scrollLayout->addWidget(m_gridContainer);
 
@@ -86,6 +86,20 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
     mainLayout->addWidget(m_scrollArea);
 }
 
+int SearchResultWidget::calculateColumns() const
+{
+    int availableWidth = m_gridContainer->width();
+    if (availableWidth <= 0) availableWidth = width() - 2 * MARGIN;
+    int cols = (availableWidth + GRID_SPACING) / (CARD_WIDTH + GRID_SPACING);
+    return qMax(1, cols);
+}
+
+void SearchResultWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    rearrangeCards();
+}
+
 void SearchResultWidget::clearCards()
 {
     while (QLayoutItem* item = m_gridLayout->takeAt(0)) {
@@ -102,15 +116,40 @@ void SearchResultWidget::addMovieCard(const Movie& movie)
     connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
     m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
     m_col++;
-    if (m_col >= COLS) {
+    if (m_col >= calculateColumns()) {
         m_col = 0;
         m_row++;
+    }
+}
+
+void SearchResultWidget::rearrangeCards()
+{
+    if (m_allMovies.isEmpty()) return;
+
+    while (QLayoutItem* item = m_gridLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    m_col = 0;
+    m_row = 0;
+
+    int cols = calculateColumns();
+    for (const Movie& movie : m_allMovies) {
+        auto* card = new MovieCard(movie, m_gridContainer);
+        connect(card, &MovieCard::clicked, this, &SearchResultWidget::movieClicked);
+        m_gridLayout->addWidget(card, m_row, m_col, Qt::AlignTop);
+        m_col++;
+        if (m_col >= cols) {
+            m_col = 0;
+            m_row++;
+        }
     }
 }
 
 void SearchResultWidget::setResults(const SearchResult& result)
 {
     clearCards();
+    m_allMovies = result.movies;
     m_lastResult = result;
     m_currentSkip = result.skip + result.count;
     m_statusLabel->setVisible(false);
@@ -133,6 +172,7 @@ void SearchResultWidget::appendResults(const SearchResult& result)
 {
     m_lastResult = result;
     m_currentSkip = result.skip + result.count;
+    m_allMovies.append(result.movies);
 
     for (const Movie& movie : result.movies) {
         addMovieCard(movie);
@@ -148,6 +188,7 @@ void SearchResultWidget::showLoading(bool show)
         m_statusLabel->setVisible(true);
         m_loadMoreBtn->setVisible(false);
         clearCards();
+        m_allMovies.clear();
     } else {
         m_statusLabel->setVisible(false);
     }

@@ -4,6 +4,9 @@
 #include <QTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QResizeEvent>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 #include "moviemodel.h"
 #include "ratingwidget.h"
 #include "databasemanager.h"
@@ -28,6 +31,7 @@ private:
     void loadPoster(const QString& url);
     void updateUserSection();
     void buildUI();
+    void updateLayoutDirection();
 
     DatabaseManager* m_db;
     Movie m_movie;
@@ -58,4 +62,10 @@ private:
 
     QScrollArea* m_scrollArea;
     QWidget* m_contentWidget;
+
+    QWidget* m_topWidget;
+    QHBoxLayout* m_topHLayout;
+    QVBoxLayout* m_infoLayout;
+    bool m_isVerticalLayout = false;
+    static constexpr int NARROW_THRESHOLD = 560;
 };

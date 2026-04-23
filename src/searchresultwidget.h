@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QGridLayout>
+#include <QResizeEvent>
 #include "moviemodel.h"
 #include "moviecard.h"
 
@@ -22,9 +23,14 @@ signals:
     void movieClicked(const Movie& movie);
     void loadMoreRequested(int skip);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void clearCards();
     void addMovieCard(const Movie& movie);
+    void rearrangeCards();
+    int calculateColumns() const;
 
     QScrollArea* m_scrollArea;
     QWidget* m_gridContainer;
@@ -37,5 +43,8 @@ private:
     SearchResult m_lastResult;
     int m_col = 0;
     int m_row = 0;
-    static constexpr int COLS = 5;
+    QList<Movie> m_allMovies;
+    static constexpr int CARD_WIDTH = 170;
+    static constexpr int GRID_SPACING = 18;
+    static constexpr int MARGIN = 24;
 };

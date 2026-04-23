@@ -6,12 +6,83 @@
 #include <QScrollBar>
 #include <QFrame>
 #include <QLabel>
+#include <QStyle>
+#include <QWidgetItem>
 
 const QStringList HomeWidget::HOT_SEARCHES = {
     "流浪地球", "哪吒", "长津湖", "封神", "满江红",
     "肖申克的救赎", "阿甘正传", "泰坦尼克号", "盗梦空间",
     "星际穿越", "权力的游戏", "破产姐妹", "老友记"
 };
+
+FlowLayout::FlowLayout(QWidget* parent, int margin, int hspacing, int vspacing)
+    : QLayout(parent), m_hSpace(hspacing), m_vSpace(vspacing)
+{
+    setContentsMargins(margin, margin, margin, margin);
+}
+
+FlowLayout::~FlowLayout()
+{
+    QLayoutItem* item;
+    while ((item = takeAt(0))) delete item;
+}
+
+void FlowLayout::addItem(QLayoutItem* item) { m_itemList.append(item); }
+int FlowLayout::horizontalSpacing() const { return m_hSpace >= 0 ? m_hSpace : smartSpacing(QStyle::PM_LayoutHorizontalSpacing); }
+int FlowLayout::verticalSpacing() const { return m_vSpace >= 0 ? m_vSpace : smartSpacing(QStyle::PM_LayoutVerticalSpacing); }
+int FlowLayout::count() const { return m_itemList.size(); }
+QLayoutItem* FlowLayout::itemAt(int index) const { return m_itemList.value(index); }
+QLayoutItem* FlowLayout::takeAt(int index) { return index >= 0 && index < m_itemList.size() ? m_itemList.takeAt(index) : nullptr; }
+Qt::Orientations FlowLayout::expandingDirections() const { return {}; }
+bool FlowLayout::hasHeightForWidth() const { return true; }
+int FlowLayout::heightForWidth(int width) const { return doLayout(QRect(0, 0, width, 0), true); }
+QSize FlowLayout::minimumSize() const { return QSize(doLayout(QRect(0, 0, 0, 0), true), 0); }
+QSize FlowLayout::sizeHint() const { return minimumSize(); }
+
+void FlowLayout::setGeometry(const QRect& rect)
+{
+    QLayout::setGeometry(rect);
+    doLayout(rect, false);
+}
+
+int FlowLayout::doLayout(const QRect& rect, bool testOnly) const
+{
+    int left, top, right, bottom;
+    getContentsMargins(&left, &top, &right, &bottom);
+    QRect effectiveRect = rect.adjusted(+left, +top, -right, -bottom);
+    int x = effectiveRect.x();
+    int y = effectiveRect.y();
+    int lineHeight = 0;
+
+    for (QLayoutItem* item : m_itemList) {
+        QWidget* wid = item->widget();
+        int spaceX = horizontalSpacing();
+        if (spaceX < 0) spaceX = wid->style()->layoutSpacing(QSizePolicy::PushButton, QSizePolicy::PushButton, Qt::Horizontal);
+        int spaceY = verticalSpacing();
+        if (spaceY < 0) spaceY = wid->style()->layoutSpacing(QSizePolicy::PushButton, QSizePolicy::PushButton, Qt::Vertical);
+
+        int nextX = x + item->sizeHint().width() + spaceX;
+        if (nextX - spaceX > effectiveRect.right() && lineHeight > 0) {
+            x = effectiveRect.x();
+            y = y + lineHeight + spaceY;
+            nextX = x + item->sizeHint().width() + spaceX;
+            lineHeight = 0;
+        }
+
+        if (!testOnly) item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
+        x = nextX;
+        lineHeight = qMax(lineHeight, item->sizeHint().height());
+    }
+    return y + lineHeight - rect.y() + bottom;
+}
+
+int FlowLayout::smartSpacing(QStyle::PixelMetric pm) const
+{
+    QObject* parent = this->parent();
+    if (!parent) return -1;
+    if (parent->isWidgetType()) return static_cast<QWidget*>(parent)->style()->pixelMetric(pm, nullptr, static_cast<QWidget*>(parent));
+    return static_cast<QLayout*>(parent)->spacing();
+}
 
 HomeWidget::HomeWidget(DatabaseManager* db, QWidget* parent)
     : QWidget(parent)
@@ -83,24 +154,11 @@ void HomeWidget::buildHotSearchSection(QVBoxLayout* layout)
     )");
     layout->addWidget(sectionTitle);
 
-    auto* wrap = new QWidget();
-    wrap->setStyleSheet("background: white; border-radius: 12px;");
-    auto* wrapMain = new QVBoxLayout(wrap);
-    wrapMain->setContentsMargins(18, 18, 18, 18);
-    wrapMain->setSpacing(12);
+    m_hotSearchWrap = new QWidget();
+    m_hotSearchWrap->setStyleSheet("background: white; border-radius: 12px;");
+    m_hotSearchFlow = new FlowLayout(m_hotSearchWrap, 18, 10, 10);
 
-    int perRow = 6;
-    QHBoxLayout* rowLayout = nullptr;
-
-    for (int i = 0; i < HOT_SEARCHES.size(); ++i) {
-        if (i % perRow == 0) {
-            rowLayout = new QHBoxLayout();
-            rowLayout->setSpacing(10);
-            rowLayout->setAlignment(Qt::AlignLeft);
-            wrapMain->addLayout(rowLayout);
-        }
-
-        const QString& keyword = HOT_SEARCHES[i];
+    for (const QString& keyword : HOT_SEARCHES) {
         auto* btn = new QPushButton(keyword);
         btn->setStyleSheet(R"(
             QPushButton {
@@ -126,11 +184,10 @@ void HomeWidget::buildHotSearchSection(QVBoxLayout* layout)
         connect(btn, &QPushButton::clicked, this, [this, keyword]() {
             emit movieSearchRequested(keyword);
         });
-        rowLayout->addWidget(btn);
+        m_hotSearchFlow->addWidget(btn);
     }
-    if (rowLayout) rowLayout->addStretch();
 
-    layout->addWidget(wrap);
+    layout->addWidget(m_hotSearchWrap);
 }
 
 void HomeWidget::buildMyListSection(QVBoxLayout* layout)
@@ -148,8 +205,8 @@ void HomeWidget::buildMyListSection(QVBoxLayout* layout)
     m_myListWidget = new QWidget();
     m_myListWidget->setStyleSheet("background: white; border-radius: 12px;");
     m_myListGrid = new QGridLayout(m_myListWidget);
-    m_myListGrid->setContentsMargins(18, 18, 18, 18);
-    m_myListGrid->setSpacing(14);
+    m_myListGrid->setContentsMargins(MY_MARGIN, MY_MARGIN, MY_MARGIN, MY_MARGIN);
+    m_myListGrid->setSpacing(MY_CARD_SPACING);
 
     m_emptyLabel = new QLabel("还没有观影记录\n去搜索你喜欢的电影吧 🎬");
     m_emptyLabel->setAlignment(Qt::AlignCenter);
@@ -161,33 +218,39 @@ void HomeWidget::buildMyListSection(QVBoxLayout* layout)
     refreshMyList();
 }
 
-void HomeWidget::refresh()
+int HomeWidget::calculateMyListColumns() const
 {
-    refreshMyList();
+    int availableWidth = m_myListWidget->width() - 2 * MY_MARGIN;
+    if (availableWidth <= 0) availableWidth = width() - 2 * 28 - 2 * MY_MARGIN;
+    int cols = (availableWidth + MY_CARD_SPACING) / (MY_CARD_WIDTH + MY_CARD_SPACING);
+    return qMax(1, cols);
 }
 
-void HomeWidget::refreshMyList()
+void HomeWidget::resizeEvent(QResizeEvent* event)
 {
+    QWidget::resizeEvent(event);
+    rearrangeMyList();
+}
+
+void HomeWidget::rearrangeMyList()
+{
+    if (m_watchedData.isEmpty()) return;
+
     while (QLayoutItem* item = m_myListGrid->takeAt(0)) {
         QWidget* w = item->widget();
-        if (w && w != m_emptyLabel) {
-            w->deleteLater();
-        }
+        if (w && w != m_emptyLabel) w->deleteLater();
         delete item;
     }
 
-    QList<UserReview> watched = m_db->getWatchedList();
-    if (watched.isEmpty()) {
-        m_myListGrid->addWidget(m_emptyLabel, 0, 0, 1, 5, Qt::AlignCenter);
-        m_emptyLabel->setVisible(true);
-        return;
-    }
-
     m_emptyLabel->setVisible(false);
+    int cols = calculateMyListColumns();
     int col = 0, row = 0;
-    for (const UserReview& r : watched) {
+    int maxItems = cols * 2;
+
+    for (int i = 0; i < qMin(m_watchedData.size(), maxItems); ++i) {
+        const UserReview& r = m_watchedData[i];
         auto* card = new QFrame(m_myListWidget);
-        card->setFixedSize(110, 140);
+        card->setFixedSize(MY_CARD_WIDTH, 140);
         card->setStyleSheet(R"(
             QFrame {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -222,8 +285,73 @@ void HomeWidget::refreshMyList()
 
         m_myListGrid->addWidget(card, row, col);
         col++;
-        if (col >= 6) { col = 0; row++; }
+        if (col >= cols) { col = 0; row++; }
+    }
+}
 
-        if (row > 1 && col == 0) break;
+void HomeWidget::refresh()
+{
+    refreshMyList();
+}
+
+void HomeWidget::refreshMyList()
+{
+    while (QLayoutItem* item = m_myListGrid->takeAt(0)) {
+        QWidget* w = item->widget();
+        if (w && w != m_emptyLabel) w->deleteLater();
+        delete item;
+    }
+
+    m_watchedData = m_db->getWatchedList();
+    if (m_watchedData.isEmpty()) {
+        m_myListGrid->addWidget(m_emptyLabel, 0, 0, 1, 5, Qt::AlignCenter);
+        m_emptyLabel->setVisible(true);
+        return;
+    }
+
+    m_emptyLabel->setVisible(false);
+    int cols = calculateMyListColumns();
+    int col = 0, row = 0;
+    int maxItems = cols * 2;
+
+    for (int i = 0; i < qMin(m_watchedData.size(), maxItems); ++i) {
+        const UserReview& r = m_watchedData[i];
+        auto* card = new QFrame(m_myListWidget);
+        card->setFixedSize(MY_CARD_WIDTH, 140);
+        card->setStyleSheet(R"(
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FAFAFA, stop:1 #F0F0F0);
+                border-radius: 10px;
+                border: 1px solid #E8E8E8;
+            }
+            QFrame:hover {
+                border-color: #00B386;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #F0FBF7, stop:1 #E8F8F0);
+            }
+        )");
+        card->setCursor(Qt::PointingHandCursor);
+
+        auto* cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(8, 8, 8, 8);
+        cardLayout->setSpacing(4);
+
+        auto* nameLabel = new QLabel(r.movieName.left(8) + (r.movieName.length() > 8 ? "..." : ""));
+        nameLabel->setAlignment(Qt::AlignCenter);
+        nameLabel->setWordWrap(true);
+        nameLabel->setStyleSheet("font-size: 12px; color: #444; font-weight: bold;");
+
+        auto* ratingLabel = new QLabel(r.rating > 0 ? QString("⭐ %1").arg(r.rating, 0, 'f', 1) : "✓ 看过");
+        ratingLabel->setAlignment(Qt::AlignCenter);
+        ratingLabel->setStyleSheet("font-size: 12px; color: #FF6000; font-weight: bold;");
+
+        cardLayout->addStretch();
+        cardLayout->addWidget(nameLabel);
+        cardLayout->addWidget(ratingLabel);
+
+        m_myListGrid->addWidget(card, row, col);
+        col++;
+        if (col >= cols) { col = 0; row++; }
     }
 }

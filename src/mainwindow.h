@@ -5,6 +5,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QComboBox>
+#include <QResizeEvent>
 #include "apimanager.h"
 #include "databasemanager.h"
 #include "searchresultwidget.h"
@@ -15,6 +16,9 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void onSearch();
@@ -31,6 +35,7 @@ private:
     void buildHeader(QVBoxLayout* layout);
     void buildNavBar(QHBoxLayout* layout);
     void performSearch(const QString& query, int skip = 0);
+    void updateSearchBoxWidth();
 
     ApiManager* m_api;
     DatabaseManager* m_db;
@@ -44,6 +49,7 @@ private:
     QLabel* m_loadingLabel;
     QPushButton* m_navHome;
     QPushButton* m_navSearch;
+    QFrame* m_searchContainer;
 
     QString m_currentQuery;
     enum Page { HOME = 0, SEARCH = 1, DETAIL = 2 };
