@@ -140,17 +140,18 @@ void MovieDetailWidget::buildUI()
 
     m_topWidget = new QWidget();
     m_topWidget->setStyleSheet("background: white; border-radius: 14px; border: 1px solid #ECECEC;");
-    m_topHLayout = new QHBoxLayout(m_topWidget);
-    m_topHLayout->setContentsMargins(24, 24, 24, 24);
-    m_topHLayout->setSpacing(28);
+    m_topGrid = new QGridLayout(m_topWidget);
+    m_topGrid->setContentsMargins(24, 24, 24, 24);
+    m_topGrid->setSpacing(28);
 
     m_posterLabel = new QLabel();
     m_posterLabel->setFixedSize(170, 235);
     m_posterLabel->setAlignment(Qt::AlignCenter);
     m_posterLabel->setStyleSheet("background: #F0F0F0; border-radius: 10px;");
-    m_topHLayout->addWidget(m_posterLabel, 0, Qt::AlignTop);
 
-    m_infoLayout = new QVBoxLayout();
+    m_infoWidget = new QWidget();
+    m_infoLayout = new QVBoxLayout(m_infoWidget);
+    m_infoLayout->setContentsMargins(0, 0, 0, 0);
     m_infoLayout->setSpacing(8);
 
     m_titleLabel = new QLabel();
@@ -221,7 +222,10 @@ void MovieDetailWidget::buildUI()
     m_infoLayout->addLayout(btnLayout);
     m_infoLayout->addStretch();
 
-    m_topHLayout->addLayout(m_infoLayout, 1);
+    m_topGrid->addWidget(m_posterLabel, 0, 0, Qt::AlignTop);
+    m_topGrid->addWidget(m_infoWidget, 0, 1);
+    m_topGrid->setColumnStretch(1, 1);
+
     contentLayout->addWidget(m_topWidget);
 
     auto* ratingCard = new QFrame();
@@ -300,27 +304,27 @@ void MovieDetailWidget::buildUI()
     contentLayout->addStretch();
 }
 
-void MovieDetailWidget::updateLayoutDirection()
+void MovieDetailWidget::updateTopLayout()
 {
     bool shouldVertical = width() < NARROW_THRESHOLD;
     if (shouldVertical == m_isVerticalLayout) return;
     m_isVerticalLayout = shouldVertical;
 
-    m_topHLayout->removeWidget(m_posterLabel);
-    m_topHLayout->removeItem(m_infoLayout);
+    m_topGrid->removeWidget(m_posterLabel);
+    m_topGrid->removeWidget(m_infoWidget);
 
     if (shouldVertical) {
-        m_topHLayout->setDirection(QBoxLayout::TopToBottom);
-        m_topHLayout->setAlignment(m_posterLabel, Qt::AlignHCenter);
+        m_topGrid->addWidget(m_posterLabel, 0, 0, Qt::AlignHCenter);
+        m_topGrid->addWidget(m_infoWidget, 1, 0);
+        m_topGrid->setColumnStretch(0, 1);
         m_posterLabel->setFixedSize(140, 195);
     } else {
-        m_topHLayout->setDirection(QBoxLayout::LeftToRight);
-        m_topHLayout->setAlignment(m_posterLabel, Qt::AlignTop);
+        m_topGrid->addWidget(m_posterLabel, 0, 0, Qt::AlignTop);
+        m_topGrid->addWidget(m_infoWidget, 0, 1);
+        m_topGrid->setColumnStretch(0, 0);
+        m_topGrid->setColumnStretch(1, 1);
         m_posterLabel->setFixedSize(170, 235);
     }
-
-    m_topHLayout->insertWidget(0, m_posterLabel, 0, shouldVertical ? Qt::AlignHCenter : Qt::AlignTop);
-    m_topHLayout->insertLayout(1, m_infoLayout, 1);
 
     if (!m_movie.doubanId.isEmpty()) {
         loadPoster(m_movie.getPoster());
@@ -384,7 +388,7 @@ void MovieDetailWidget::setMovie(const Movie& movie)
 
     loadPoster(movie.getPoster());
     updateUserSection();
-    updateLayoutDirection();
+    updateTopLayout();
     m_scrollArea->verticalScrollBar()->setValue(0);
 }
 

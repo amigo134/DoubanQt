@@ -6,83 +6,12 @@
 #include <QScrollBar>
 #include <QFrame>
 #include <QLabel>
-#include <QStyle>
-#include <QWidgetItem>
 
 const QStringList HomeWidget::HOT_SEARCHES = {
     "流浪地球", "哪吒", "长津湖", "封神", "满江红",
     "肖申克的救赎", "阿甘正传", "泰坦尼克号", "盗梦空间",
     "星际穿越", "权力的游戏", "破产姐妹", "老友记"
 };
-
-FlowLayout::FlowLayout(QWidget* parent, int margin, int hspacing, int vspacing)
-    : QLayout(parent), m_hSpace(hspacing), m_vSpace(vspacing)
-{
-    setContentsMargins(margin, margin, margin, margin);
-}
-
-FlowLayout::~FlowLayout()
-{
-    QLayoutItem* item;
-    while ((item = takeAt(0))) delete item;
-}
-
-void FlowLayout::addItem(QLayoutItem* item) { m_itemList.append(item); }
-int FlowLayout::horizontalSpacing() const { return m_hSpace >= 0 ? m_hSpace : smartSpacing(QStyle::PM_LayoutHorizontalSpacing); }
-int FlowLayout::verticalSpacing() const { return m_vSpace >= 0 ? m_vSpace : smartSpacing(QStyle::PM_LayoutVerticalSpacing); }
-int FlowLayout::count() const { return m_itemList.size(); }
-QLayoutItem* FlowLayout::itemAt(int index) const { return m_itemList.value(index); }
-QLayoutItem* FlowLayout::takeAt(int index) { return index >= 0 && index < m_itemList.size() ? m_itemList.takeAt(index) : nullptr; }
-Qt::Orientations FlowLayout::expandingDirections() const { return {}; }
-bool FlowLayout::hasHeightForWidth() const { return true; }
-int FlowLayout::heightForWidth(int width) const { return doLayout(QRect(0, 0, width, 0), true); }
-QSize FlowLayout::minimumSize() const { return QSize(doLayout(QRect(0, 0, 0, 0), true), 0); }
-QSize FlowLayout::sizeHint() const { return minimumSize(); }
-
-void FlowLayout::setGeometry(const QRect& rect)
-{
-    QLayout::setGeometry(rect);
-    doLayout(rect, false);
-}
-
-int FlowLayout::doLayout(const QRect& rect, bool testOnly) const
-{
-    int left, top, right, bottom;
-    getContentsMargins(&left, &top, &right, &bottom);
-    QRect effectiveRect = rect.adjusted(+left, +top, -right, -bottom);
-    int x = effectiveRect.x();
-    int y = effectiveRect.y();
-    int lineHeight = 0;
-
-    for (QLayoutItem* item : m_itemList) {
-        QWidget* wid = item->widget();
-        int spaceX = horizontalSpacing();
-        if (spaceX < 0) spaceX = wid->style()->layoutSpacing(QSizePolicy::PushButton, QSizePolicy::PushButton, Qt::Horizontal);
-        int spaceY = verticalSpacing();
-        if (spaceY < 0) spaceY = wid->style()->layoutSpacing(QSizePolicy::PushButton, QSizePolicy::PushButton, Qt::Vertical);
-
-        int nextX = x + item->sizeHint().width() + spaceX;
-        if (nextX - spaceX > effectiveRect.right() && lineHeight > 0) {
-            x = effectiveRect.x();
-            y = y + lineHeight + spaceY;
-            nextX = x + item->sizeHint().width() + spaceX;
-            lineHeight = 0;
-        }
-
-        if (!testOnly) item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
-        x = nextX;
-        lineHeight = qMax(lineHeight, item->sizeHint().height());
-    }
-    return y + lineHeight - rect.y() + bottom;
-}
-
-int FlowLayout::smartSpacing(QStyle::PixelMetric pm) const
-{
-    QObject* parent = this->parent();
-    if (!parent) return -1;
-    if (parent->isWidgetType()) return static_cast<QWidget*>(parent)->style()->pixelMetric(pm, nullptr, static_cast<QWidget*>(parent));
-    return static_cast<QLayout*>(parent)->spacing();
-}
 
 HomeWidget::HomeWidget(DatabaseManager* db, QWidget* parent)
     : QWidget(parent)
@@ -156,36 +85,11 @@ void HomeWidget::buildHotSearchSection(QVBoxLayout* layout)
 
     m_hotSearchWrap = new QWidget();
     m_hotSearchWrap->setStyleSheet("background: white; border-radius: 12px;");
-    m_hotSearchFlow = new FlowLayout(m_hotSearchWrap, 18, 10, 10);
+    m_hotSearchGrid = new QGridLayout(m_hotSearchWrap);
+    m_hotSearchGrid->setContentsMargins(HOT_MARGIN, HOT_MARGIN, HOT_MARGIN, HOT_MARGIN);
+    m_hotSearchGrid->setSpacing(HOT_SPACING);
 
-    for (const QString& keyword : HOT_SEARCHES) {
-        auto* btn = new QPushButton(keyword);
-        btn->setStyleSheet(R"(
-            QPushButton {
-                background: #F0FBF7;
-                color: #00A370;
-                border: 1px solid #B8E8D8;
-                border-radius: 16px;
-                padding: 7px 16px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #00C49A, stop:1 #009A73);
-                color: white;
-                border-color: #00B386;
-            }
-            QPushButton:pressed {
-                background: #008A63;
-                color: white;
-                border-color: #008A63;
-            }
-        )");
-        connect(btn, &QPushButton::clicked, this, [this, keyword]() {
-            emit movieSearchRequested(keyword);
-        });
-        m_hotSearchFlow->addWidget(btn);
-    }
+    rearrangeHotSearch();
 
     layout->addWidget(m_hotSearchWrap);
 }
@@ -218,6 +122,14 @@ void HomeWidget::buildMyListSection(QVBoxLayout* layout)
     refreshMyList();
 }
 
+int HomeWidget::calculateHotSearchColumns() const
+{
+    int availableWidth = m_hotSearchWrap->width() - 2 * HOT_MARGIN;
+    if (availableWidth <= 0) availableWidth = width() - 2 * 28 - 2 * HOT_MARGIN;
+    int cols = (availableWidth + HOT_SPACING) / (100 + HOT_SPACING);
+    return qMax(1, qMin(cols, 7));
+}
+
 int HomeWidget::calculateMyListColumns() const
 {
     int availableWidth = m_myListWidget->width() - 2 * MY_MARGIN;
@@ -229,7 +141,54 @@ int HomeWidget::calculateMyListColumns() const
 void HomeWidget::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
+    rearrangeHotSearch();
     rearrangeMyList();
+}
+
+void HomeWidget::rearrangeHotSearch()
+{
+    while (QLayoutItem* item = m_hotSearchGrid->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    int cols = calculateHotSearchColumns();
+    int col = 0, row = 0;
+
+    for (const QString& keyword : HOT_SEARCHES) {
+        auto* btn = new QPushButton(keyword);
+        btn->setStyleSheet(R"(
+            QPushButton {
+                background: #F0FBF7;
+                color: #00A370;
+                border: 1px solid #B8E8D8;
+                border-radius: 16px;
+                padding: 7px 16px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #00C49A, stop:1 #009A73);
+                color: white;
+                border-color: #00B386;
+            }
+            QPushButton:pressed {
+                background: #008A63;
+                color: white;
+                border-color: #008A63;
+            }
+        )");
+        connect(btn, &QPushButton::clicked, this, [this, keyword]() {
+            emit movieSearchRequested(keyword);
+        });
+        m_hotSearchGrid->addWidget(btn, row, col, Qt::AlignLeft);
+        col++;
+        if (col >= cols) { col = 0; row++; }
+    }
+
+    for (int c = 0; c < cols; ++c) {
+        m_hotSearchGrid->setColumnStretch(c, 1);
+    }
 }
 
 void HomeWidget::rearrangeMyList()

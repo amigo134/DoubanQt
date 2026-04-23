@@ -5,8 +5,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QResizeEvent>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QGridLayout>
 #include "moviemodel.h"
 #include "ratingwidget.h"
 #include "databasemanager.h"
@@ -31,7 +30,7 @@ private:
     void loadPoster(const QString& url);
     void updateUserSection();
     void buildUI();
-    void updateLayoutDirection();
+    void updateTopLayout();
 
     DatabaseManager* m_db;
     Movie m_movie;
@@ -64,7 +63,8 @@ private:
     QWidget* m_contentWidget;
 
     QWidget* m_topWidget;
-    QHBoxLayout* m_topHLayout;
+    QGridLayout* m_topGrid;
+    QWidget* m_infoWidget;
     QVBoxLayout* m_infoLayout;
     bool m_isVerticalLayout = false;
     static constexpr int NARROW_THRESHOLD = 560;
