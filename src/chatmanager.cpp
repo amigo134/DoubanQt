@@ -52,6 +52,11 @@ bool ChatManager::isConnected() const
     return m_socket->state() == QAbstractSocket::ConnectedState;
 }
 
+QString ChatManager::currentUsername() const
+{
+    return m_username;
+}
+
 void ChatManager::sendAddFriend(const QString& username)
 {
     QJsonObject obj;

@@ -11,6 +11,7 @@ public:
     void connectToServer(const QString& username, const QString& passwordHash);
     void disconnectFromServer();
     bool isConnected() const;
+    QString currentUsername() const;
 
     void sendAddFriend(const QString& username);
     void acceptFriend(const QString& username);

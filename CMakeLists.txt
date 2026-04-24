@@ -28,6 +28,9 @@ set(SOURCES
     src/logindialog.cpp
     src/chatmanager.cpp
     src/friendswidget.cpp
+    src/avatarwidget.cpp
+    src/chatbubble.cpp
+    src/chatmessagewidget.cpp
 )
 
 set(HEADERS
@@ -48,6 +51,9 @@ set(HEADERS
     src/chatmodel.h
     src/chatmanager.h
     src/friendswidget.h
+    src/avatarwidget.h
+    src/chatbubble.h
+    src/chatmessagewidget.h
 )
 
 set(RESOURCES

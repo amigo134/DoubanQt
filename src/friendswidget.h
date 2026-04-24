@@ -1,11 +1,10 @@
 #pragma once
 #include <QWidget>
 #include <QListWidget>
-#include <QTextEdit>
+#include <QScrollArea>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
-#include <QSplitter>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMap>
@@ -43,6 +42,7 @@ private:
     void appendChatMessage(const QString& from, const QString& content, const QString& time, bool isOwn);
     void showPlaceholder();
     void updateRequestBadge();
+    void scrollToBottom();
 
     ChatManager* m_chatMgr;
 
@@ -53,7 +53,9 @@ private:
 
     QWidget* m_chatArea;
     QLabel* m_chatTitle;
-    QTextEdit* m_chatHistory;
+    QScrollArea* m_chatScroll;
+    QWidget* m_chatContainer;
+    QVBoxLayout* m_chatLayout;
     QLineEdit* m_msgInput;
     QPushButton* m_sendBtn;
     QWidget* m_placeholder;

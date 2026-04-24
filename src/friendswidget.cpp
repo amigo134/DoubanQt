@@ -1,4 +1,5 @@
 #include "friendswidget.h"
+#include "chatmessagewidget.h"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QScrollBar>
@@ -99,12 +100,24 @@ void FriendsWidget::buildUI()
     m_chatTitle->setStyleSheet("background: white; border-bottom: 1px solid #E8E8EC; font-size: 15px; font-weight: bold; color: #333; padding-left: 20px;");
     chatLayout->addWidget(m_chatTitle);
 
-    m_chatHistory = new QTextEdit();
-    m_chatHistory->setReadOnly(true);
-    m_chatHistory->setStyleSheet(R"(
-        QTextEdit { background: #F5F6F8; border: none; font-size: 14px; padding: 12px; }
+    m_chatScroll = new QScrollArea();
+    m_chatScroll->setWidgetResizable(true);
+    m_chatScroll->setStyleSheet(R"(
+        QScrollArea { background: #F5F6F8; border: none; }
+        QScrollBar:vertical { width: 6px; background: transparent; }
+        QScrollBar::handle:vertical { background: #CCC; border-radius: 3px; min-height: 30px; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
     )");
-    chatLayout->addWidget(m_chatHistory);
+
+    m_chatContainer = new QWidget();
+    m_chatContainer->setStyleSheet("background: #F5F6F8;");
+    m_chatLayout = new QVBoxLayout(m_chatContainer);
+    m_chatLayout->setContentsMargins(0, 8, 0, 8);
+    m_chatLayout->setSpacing(0);
+    m_chatLayout->addStretch();
+
+    m_chatScroll->setWidget(m_chatContainer);
+    chatLayout->addWidget(m_chatScroll);
 
     auto* inputRow = new QHBoxLayout();
     inputRow->setContentsMargins(12, 8, 12, 12);
@@ -169,11 +182,12 @@ void FriendsWidget::onSendClicked()
     if (content.isEmpty()) return;
 
     m_chatMgr->sendMessage(m_currentChatUser, content);
-    QString time = QDateTime::currentDateTime().toString("hh:mm");
-    appendChatMessage("我", content, time, true);
+    QString time = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QString myName = m_chatMgr->currentUsername();
+    appendChatMessage(myName, content, time, true);
 
     ChatMsg msg;
-    msg.from = "me";
+    msg.from = myName;
     msg.to = m_currentChatUser;
     msg.content = content;
     msg.time = time;
@@ -329,9 +343,15 @@ void FriendsWidget::openChatWith(const QString& username)
     }
     m_chatTitle->setText(username + (online ? "  🟢 在线" : "  ⚪ 离线"));
 
-    m_chatHistory->clear();
+    QLayoutItem* child;
+    while ((child = m_chatLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) child->widget()->deleteLater();
+        delete child;
+    }
+    m_chatLayout->addStretch();
+
     for (const auto& msg : m_chatMessages[username]) {
-        appendChatMessage(msg.isOwn ? "我" : msg.from, msg.content, msg.time, msg.isOwn);
+        appendChatMessage(msg.from, msg.content, msg.time, msg.isOwn);
     }
 
     m_msgInput->setFocus();
@@ -339,21 +359,45 @@ void FriendsWidget::openChatWith(const QString& username)
 
 void FriendsWidget::appendChatMessage(const QString& from, const QString& content, const QString& time, bool isOwn)
 {
-    QString html;
-    if (isOwn) {
-        html = QString(R"(<div style="text-align: right; margin: 6px 0;">
-            <span style="color: #999; font-size: 11px;">%1</span><br>
-            <span style="background: #00B51D; color: white; padding: 6px 12px; border-radius: 12px; display: inline-block; max-width: 70%%; word-break: break-word;">%2</span>
-        </div>)").arg(time, content.toHtmlEscaped());
-    } else {
-        html = QString(R"(<div style="text-align: left; margin: 6px 0;">
-            <span style="color: #00B51D; font-weight: bold; font-size: 12px;">%1</span>
-            <span style="color: #999; font-size: 11px;"> %2</span><br>
-            <span style="background: white; color: #333; padding: 6px 12px; border-radius: 12px; display: inline-block; max-width: 70%%; word-break: break-word; border: 1px solid #E8E8EC;">%3</span>
-        </div>)").arg(from.toHtmlEscaped(), time, content.toHtmlEscaped());
+    int stretchIdx = m_chatLayout->count() - 1;
+
+    bool showTime = true;
+
+    if (stretchIdx > 0) {
+        auto* prevItem = m_chatLayout->itemAt(stretchIdx - 1);
+        if (prevItem && prevItem->widget()) {
+            auto* prevMsg = qobject_cast<ChatMessageWidget*>(prevItem->widget());
+            if (prevMsg) {
+                QString prevTimeStr = prevMsg->messageTime();
+                QDateTime prevDt = QDateTime::fromString(prevTimeStr, Qt::ISODate);
+                QDateTime curDt = QDateTime::fromString(time, Qt::ISODate);
+                if (prevDt.isValid() && curDt.isValid()) {
+                    qint64 gapSecs = qAbs(prevDt.secsTo(curDt));
+                    if (gapSecs < 60) {
+                        showTime = false;
+                    }
+                }
+            }
+        }
     }
-    m_chatHistory->append(html);
-    m_chatHistory->verticalScrollBar()->setValue(m_chatHistory->verticalScrollBar()->maximum());
+
+    if (showTime && !time.isEmpty()) {
+        auto* timeLabel = ChatMessageWidget::createTimeLabel(time);
+        m_chatLayout->insertWidget(stretchIdx, timeLabel);
+        stretchIdx = m_chatLayout->count() - 1;
+    }
+
+    auto* msgWidget = new ChatMessageWidget(from, content, time, isOwn);
+    m_chatLayout->insertWidget(stretchIdx, msgWidget);
+
+    scrollToBottom();
+}
+
+void FriendsWidget::scrollToBottom()
+{
+    QMetaObject::invokeMethod(this, [this]() {
+        m_chatScroll->verticalScrollBar()->setValue(m_chatScroll->verticalScrollBar()->maximum());
+    }, Qt::QueuedConnection);
 }
 
 void FriendsWidget::showPlaceholder()
