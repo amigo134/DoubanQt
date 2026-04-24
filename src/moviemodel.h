@@ -101,6 +101,7 @@ struct UserReview {
     QString createTime;
     bool isWished = false;
     bool isWatched = false;
+    QString posterUrl;
 };
 
 struct SearchResult {

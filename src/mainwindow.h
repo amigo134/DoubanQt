@@ -10,6 +10,7 @@
 #include "searchresultwidget.h"
 #include "moviedetailwidget.h"
 #include "homewidget.h"
+#include "profilewidget.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -42,12 +43,15 @@ private:
     SearchResultWidget* m_searchResultWidget;
     MovieDetailWidget* m_detailWidget;
     HomeWidget* m_homeWidget;
+    ProfileWidget* m_profileWidget;
 
     QLabel* m_loadingLabel;
     QPushButton* m_navHome;
     QPushButton* m_navSearch;
+    QPushButton* m_navProfile;
     QFrame* m_searchContainer;
 
     QString m_currentQuery;
-    enum Page { HOME = 0, SEARCH = 1, DETAIL = 2 };
+    int m_prevPage = HOME;
+    enum Page { HOME = 0, SEARCH = 1, DETAIL = 2, PROFILE = 3 };
 };

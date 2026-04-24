@@ -15,9 +15,10 @@ public:
     UserReview getReview(const QString& doubanId);
     QList<UserReview> getAllReviews();
     bool deleteReview(const QString& doubanId);
+    void updatePosterUrl(const QString& doubanId, const QString& posterUrl);
 
-    bool setWished(const QString& doubanId, const QString& movieName, bool wished);
-    bool setWatched(const QString& doubanId, const QString& movieName, bool watched);
+    bool setWished(const QString& doubanId, const QString& movieName, bool wished, const QString& posterUrl = QString());
+    bool setWatched(const QString& doubanId, const QString& movieName, bool watched, const QString& posterUrl = QString());
     QList<UserReview> getWishList();
     QList<UserReview> getWatchedList();
 

@@ -41,7 +41,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_detailWidget, &MovieDetailWidget::backRequested,
             this, &MainWindow::onBackFromDetail);
     connect(m_detailWidget, &MovieDetailWidget::reviewUpdated,
-            this, [this]() { m_homeWidget->refresh(); });
+            this, [this]() { m_homeWidget->refresh(); m_profileWidget->refresh(); });
 
     connect(m_homeWidget, &HomeWidget::movieSearchRequested,
             this, [this](const QString& q) {
@@ -53,6 +53,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_api, &ApiManager::top250Ready,
             m_homeWidget, &HomeWidget::setTop250Data);
     connect(m_homeWidget, &HomeWidget::movieClicked,
+            this, &MainWindow::onMovieClicked);
+
+    connect(m_profileWidget, &ProfileWidget::movieClicked,
             this, &MainWindow::onMovieClicked);
 }
 
@@ -101,6 +104,7 @@ void MainWindow::buildUI()
 
     m_navHome = new QPushButton("首页");
     m_navSearch = new QPushButton("搜索结果");
+    m_navProfile = new QPushButton("我的");
     auto navStyle = [](bool active) {
         return QString(R"(
             QPushButton {
@@ -122,12 +126,15 @@ void MainWindow::buildUI()
     m_navHome->setStyleSheet(navStyle(true));
     m_navSearch->setStyleSheet(navStyle(false));
     m_navSearch->setVisible(false);
+    m_navProfile->setStyleSheet(navStyle(false));
 
     connect(m_navHome, &QPushButton::clicked, this, [this]() { onNavClicked(HOME); });
     connect(m_navSearch, &QPushButton::clicked, this, [this]() { onNavClicked(SEARCH); });
+    connect(m_navProfile, &QPushButton::clicked, this, [this]() { onNavClicked(PROFILE); });
 
     headerLayout->addWidget(m_navHome);
     headerLayout->addWidget(m_navSearch);
+    headerLayout->addWidget(m_navProfile);
 
     headerLayout->addStretch();
 
@@ -205,10 +212,12 @@ void MainWindow::buildUI()
     m_homeWidget = new HomeWidget(m_db, this);
     m_searchResultWidget = new SearchResultWidget(this);
     m_detailWidget = new MovieDetailWidget(m_db, this);
+    m_profileWidget = new ProfileWidget(m_db, this);
 
     m_stackedWidget->addWidget(m_homeWidget);
     m_stackedWidget->addWidget(m_searchResultWidget);
     m_stackedWidget->addWidget(m_detailWidget);
+    m_stackedWidget->addWidget(m_profileWidget);
 
     m_stackedWidget->setCurrentIndex(HOME);
 }
@@ -258,6 +267,7 @@ void MainWindow::onLoadMore(int skip)
 
 void MainWindow::onMovieClicked(const Movie& movie)
 {
+    m_prevPage = m_stackedWidget->currentIndex();
     if (movie.doubanId.isEmpty()) {
         m_detailWidget->setMovie(movie);
         m_stackedWidget->setCurrentIndex(DETAIL);
@@ -272,13 +282,15 @@ void MainWindow::onMovieClicked(const Movie& movie)
 void MainWindow::onMovieDetailReady(const Movie& movie)
 {
     m_detailWidget->setMovie(movie);
+    m_db->updatePosterUrl(movie.doubanId, movie.getPoster());
 }
 
 void MainWindow::onBackFromDetail()
 {
-    m_stackedWidget->setCurrentIndex(
-        m_navSearch->isVisible() && !m_currentQuery.isEmpty() ? SEARCH : HOME
-    );
+    int page = m_prevPage;
+    if (page == DETAIL) page = HOME;
+    m_stackedWidget->setCurrentIndex(page);
+    onNavClicked(page);
 }
 
 void MainWindow::onNavClicked(int index)
@@ -312,9 +324,12 @@ void MainWindow::onNavClicked(int index)
     )";
     m_navHome->setStyleSheet(index == HOME ? activeStyle : inactiveStyle);
     m_navSearch->setStyleSheet(index == SEARCH ? activeStyle : inactiveStyle);
+    m_navProfile->setStyleSheet(index == PROFILE ? activeStyle : inactiveStyle);
 
     if (index == HOME) {
         m_homeWidget->refresh();
+    } else if (index == PROFILE) {
+        m_profileWidget->refresh();
     }
 }
 

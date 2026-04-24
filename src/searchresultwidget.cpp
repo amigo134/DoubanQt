@@ -44,7 +44,6 @@ SearchResultWidget::SearchResultWidget(QWidget* parent)
     m_gridLayout = new QGridLayout(m_gridContainer);
     m_gridLayout->setSpacing(GRID_SPACING);
     m_gridLayout->setContentsMargins(0, 0, 0, 0);
-    m_gridLayout->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     scrollLayout->addWidget(m_gridContainer);
 
     m_statusLabel = new QLabel();
@@ -132,10 +131,18 @@ void SearchResultWidget::rearrangeCards()
         m_gridLayout->removeWidget(card);
     }
 
+    for (int c = 0; c < 20; ++c) {
+        m_gridLayout->setColumnStretch(c, 0);
+    }
+
     for (int i = 0; i < m_cards.size(); ++i) {
         int row = i / cols;
         int col = i % cols;
         m_gridLayout->addWidget(m_cards[i], row, col);
+    }
+
+    for (int c = 0; c < cols; ++c) {
+        m_gridLayout->setColumnStretch(c, 1);
     }
 }
 
@@ -166,6 +173,10 @@ void SearchResultWidget::setResults(const SearchResult& result)
         m_gridLayout->addWidget(card, row, col);
     }
 
+    for (int c = 0; c < cols; ++c) {
+        m_gridLayout->setColumnStretch(c, 1);
+    }
+
     m_loadMoreBtn->setVisible(result.hasMore);
 }
 
@@ -187,6 +198,10 @@ void SearchResultWidget::appendResults(const SearchResult& result)
         int row = pos / cols;
         int col = pos % cols;
         m_gridLayout->addWidget(card, row, col);
+    }
+
+    for (int c = 0; c < cols; ++c) {
+        m_gridLayout->setColumnStretch(c, 1);
     }
 
     m_loadMoreBtn->setVisible(result.hasMore);

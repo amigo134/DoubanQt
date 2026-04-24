@@ -24,6 +24,7 @@ set(SOURCES
     src/searchresultwidget.cpp
     src/homewidget.cpp
     src/imagecache.cpp
+    src/profilewidget.cpp
 )
 
 set(HEADERS
@@ -38,6 +39,7 @@ set(HEADERS
     src/homewidget.h
     src/imagecache.h
     src/moviemodel.h
+    src/profilewidget.h
 )
 
 set(RESOURCES

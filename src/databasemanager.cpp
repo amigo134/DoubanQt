@@ -47,6 +47,7 @@ bool DatabaseManager::createTables()
             content TEXT,
             is_wished INTEGER DEFAULT 0,
             is_watched INTEGER DEFAULT 0,
+            poster_url TEXT,
             create_time TEXT,
             update_time TEXT
         )
@@ -56,6 +57,9 @@ bool DatabaseManager::createTables()
         qWarning() << "创建表失败:" << query.lastError().text();
         return false;
     }
+
+    query.exec("ALTER TABLE reviews ADD COLUMN poster_url TEXT");
+
     return true;
 }
 
@@ -63,14 +67,15 @@ bool DatabaseManager::saveReview(const UserReview& review)
 {
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, rating, content, is_wished, is_watched, create_time, update_time)
-        VALUES (:douban_id, :movie_name, :rating, :content, :is_wished, :is_watched, :create_time, :update_time)
+        INSERT INTO reviews (douban_id, movie_name, rating, content, is_wished, is_watched, poster_url, create_time, update_time)
+        VALUES (:douban_id, :movie_name, :rating, :content, :is_wished, :is_watched, :poster_url, :create_time, :update_time)
         ON CONFLICT(douban_id) DO UPDATE SET
             movie_name = :movie_name2,
             rating = :rating2,
             content = :content2,
             is_wished = :is_wished2,
             is_watched = :is_watched2,
+            poster_url = :poster_url2,
             update_time = :update_time2
     )");
 
@@ -81,6 +86,7 @@ bool DatabaseManager::saveReview(const UserReview& review)
     query.bindValue(":content", review.content);
     query.bindValue(":is_wished", review.isWished ? 1 : 0);
     query.bindValue(":is_watched", review.isWatched ? 1 : 0);
+    query.bindValue(":poster_url", review.posterUrl);
     query.bindValue(":create_time", review.createTime.isEmpty() ? now : review.createTime);
     query.bindValue(":update_time", now);
     query.bindValue(":movie_name2", review.movieName);
@@ -88,6 +94,7 @@ bool DatabaseManager::saveReview(const UserReview& review)
     query.bindValue(":content2", review.content);
     query.bindValue(":is_wished2", review.isWished ? 1 : 0);
     query.bindValue(":is_watched2", review.isWatched ? 1 : 0);
+    query.bindValue(":poster_url2", review.posterUrl);
     query.bindValue(":update_time2", now);
 
     if (!query.exec()) {
@@ -112,6 +119,7 @@ UserReview DatabaseManager::getReview(const QString& doubanId)
         review.content = query.value("content").toString();
         review.isWished = query.value("is_wished").toInt() != 0;
         review.isWatched = query.value("is_watched").toInt() != 0;
+        review.posterUrl = query.value("poster_url").toString();
         review.createTime = query.value("create_time").toString();
     }
     return review;
@@ -131,6 +139,7 @@ QList<UserReview> DatabaseManager::getAllReviews()
         review.content = query.value("content").toString();
         review.isWished = query.value("is_wished").toInt() != 0;
         review.isWatched = query.value("is_watched").toInt() != 0;
+        review.posterUrl = query.value("poster_url").toString();
         review.createTime = query.value("create_time").toString();
         reviews.append(review);
     }
@@ -145,40 +154,54 @@ bool DatabaseManager::deleteReview(const QString& doubanId)
     return query.exec();
 }
 
-bool DatabaseManager::setWished(const QString& doubanId, const QString& movieName, bool wished)
+void DatabaseManager::updatePosterUrl(const QString& doubanId, const QString& posterUrl)
+{
+    if (posterUrl.isEmpty()) return;
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE reviews SET poster_url = :poster WHERE douban_id = :id AND (poster_url IS NULL OR poster_url = '')");
+    query.bindValue(":poster", posterUrl);
+    query.bindValue(":id", doubanId);
+    query.exec();
+}
+
+bool DatabaseManager::setWished(const QString& doubanId, const QString& movieName, bool wished, const QString& posterUrl)
 {
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, is_wished, create_time, update_time)
-        VALUES (:id, :name, :wished, :time, :time2)
-        ON CONFLICT(douban_id) DO UPDATE SET is_wished = :wished2, update_time = :time3
+        INSERT INTO reviews (douban_id, movie_name, is_wished, poster_url, create_time, update_time)
+        VALUES (:id, :name, :wished, :poster, :time, :time2)
+        ON CONFLICT(douban_id) DO UPDATE SET is_wished = :wished2, poster_url = :poster2, update_time = :time3
     )");
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
     query.bindValue(":id", doubanId);
     query.bindValue(":name", movieName);
     query.bindValue(":wished", wished ? 1 : 0);
+    query.bindValue(":poster", posterUrl);
     query.bindValue(":time", now);
     query.bindValue(":time2", now);
     query.bindValue(":wished2", wished ? 1 : 0);
+    query.bindValue(":poster2", posterUrl);
     query.bindValue(":time3", now);
     return query.exec();
 }
 
-bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieName, bool watched)
+bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieName, bool watched, const QString& posterUrl)
 {
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, is_watched, create_time, update_time)
-        VALUES (:id, :name, :watched, :time, :time2)
-        ON CONFLICT(douban_id) DO UPDATE SET is_watched = :watched2, update_time = :time3
+        INSERT INTO reviews (douban_id, movie_name, is_watched, poster_url, create_time, update_time)
+        VALUES (:id, :name, :watched, :poster, :time, :time2)
+        ON CONFLICT(douban_id) DO UPDATE SET is_watched = :watched2, poster_url = :poster2, update_time = :time3
     )");
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
     query.bindValue(":id", doubanId);
     query.bindValue(":name", movieName);
     query.bindValue(":watched", watched ? 1 : 0);
+    query.bindValue(":poster", posterUrl);
     query.bindValue(":time", now);
     query.bindValue(":time2", now);
     query.bindValue(":watched2", watched ? 1 : 0);
+    query.bindValue(":poster2", posterUrl);
     query.bindValue(":time3", now);
     return query.exec();
 }
@@ -193,6 +216,7 @@ QList<UserReview> DatabaseManager::getWishList()
         review.movieName = query.value("movie_name").toString();
         review.rating = query.value("rating").toDouble();
         review.isWished = true;
+        review.posterUrl = query.value("poster_url").toString();
         review.createTime = query.value("create_time").toString();
         reviews.append(review);
     }
@@ -209,6 +233,7 @@ QList<UserReview> DatabaseManager::getWatchedList()
         review.movieName = query.value("movie_name").toString();
         review.rating = query.value("rating").toDouble();
         review.isWatched = true;
+        review.posterUrl = query.value("poster_url").toString();
         review.createTime = query.value("create_time").toString();
         reviews.append(review);
     }

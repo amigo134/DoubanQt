@@ -535,6 +535,7 @@ void MovieDetailWidget::onWriteReview()
         m_userReview.content = dlg.getReview();
         m_userReview.isWished = dlg.isWished();
         m_userReview.isWatched = dlg.isWatched();
+        m_userReview.posterUrl = m_movie.getPoster();
         m_db->saveReview(m_userReview);
 
         m_movie.userRating = m_userReview.rating;
@@ -549,7 +550,7 @@ void MovieDetailWidget::onToggleWish()
 {
     m_movie.isWished = m_wishBtn->isChecked();
     m_userReview.isWished = m_movie.isWished;
-    m_db->setWished(m_movie.doubanId, m_movie.getName(), m_movie.isWished);
+    m_db->setWished(m_movie.doubanId, m_movie.getName(), m_movie.isWished, m_movie.getPoster());
     updateUserSection();
     emit reviewUpdated();
 }
@@ -558,7 +559,7 @@ void MovieDetailWidget::onToggleWatched()
 {
     m_movie.isWatched = m_watchedBtn->isChecked();
     m_userReview.isWatched = m_movie.isWatched;
-    m_db->setWatched(m_movie.doubanId, m_movie.getName(), m_movie.isWatched);
+    m_db->setWatched(m_movie.doubanId, m_movie.getName(), m_movie.isWatched, m_movie.getPoster());
     updateUserSection();
     emit reviewUpdated();
 }

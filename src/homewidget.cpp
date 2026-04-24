@@ -122,23 +122,6 @@ void HomeWidget::buildUI()
     m_top250OuterLayout->addWidget(m_top250EmptyLabel);
 
     root->addWidget(m_top250Wrap);
-
-    auto* myListTitle = new QLabel("我看过的");
-    myListTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #FF6000; padding-left: 8px;");
-    root->addWidget(myListTitle);
-
-    m_myListWrap = new QWidget();
-    m_myListWrap->setStyleSheet("background: white; border-radius: 10px;");
-    m_myListOuterLayout = new QVBoxLayout(m_myListWrap);
-    m_myListOuterLayout->setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN);
-    m_myListOuterLayout->setSpacing(SPACING);
-
-    m_emptyLabel = new QLabel("还没有观影记录\n去搜索你喜欢的电影吧");
-    m_emptyLabel->setAlignment(Qt::AlignCenter);
-    m_emptyLabel->setStyleSheet("font-size: 13px; color: #BBB; padding: 36px;");
-    m_myListOuterLayout->addWidget(m_emptyLabel);
-
-    root->addWidget(m_myListWrap);
     root->addStretch();
 
     auto* outer = new QVBoxLayout(this);
@@ -389,78 +372,4 @@ void HomeWidget::setTop250Data(const QList<Movie>& movies)
 
 void HomeWidget::refresh()
 {
-    for (auto* card : m_myCards) {
-        m_myListOuterLayout->removeWidget(card);
-        delete card;
-    }
-    m_myCards.clear();
-    m_myCols = 0;
-
-    m_watchedData = m_db->getWatchedList();
-
-    if (m_watchedData.isEmpty()) {
-        m_emptyLabel->setVisible(true);
-        while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
-            QLayout* sub = item->layout();
-            if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
-            delete item;
-        }
-        m_myListOuterLayout->addWidget(m_emptyLabel);
-        return;
-    }
-
-    m_emptyLabel->setVisible(false);
-    m_myListOuterLayout->removeWidget(m_emptyLabel);
-
-    while (QLayoutItem* item = m_myListOuterLayout->takeAt(0)) {
-        QLayout* sub = item->layout();
-        if (sub) { while (QLayoutItem* si = sub->takeAt(0)) delete si; }
-        delete item;
-    }
-
-    int cols = calcMyListCols();
-    m_myCols = cols;
-    int maxItems = cols * 2;
-
-    QHBoxLayout* row = nullptr;
-    for (int i = 0; i < qMin(m_watchedData.size(), maxItems); ++i) {
-        const UserReview& r = m_watchedData[i];
-        auto* card = new QFrame(m_myListWrap);
-        card->setFixedSize(MY_CARD_W, MY_CARD_H);
-        card->setStyleSheet(R"(
-            QFrame {
-                background: white; border-radius: 8px;
-                border: 1px solid #E8E8E8;
-            }
-            QFrame:hover { border-color: #00B386; background: #F0FBF7; }
-        )");
-        card->setCursor(Qt::PointingHandCursor);
-
-        auto* cl = new QVBoxLayout(card);
-        cl->setContentsMargins(6, 8, 6, 8);
-        cl->setSpacing(4);
-
-        auto* nm = new QLabel(r.movieName.left(8) + (r.movieName.length() > 8 ? "..." : ""));
-        nm->setAlignment(Qt::AlignCenter);
-        nm->setWordWrap(true);
-        nm->setStyleSheet("font-size: 12px; color: #333; font-weight: bold;");
-
-        auto* rt = new QLabel(r.rating > 0 ? QString("⭐ %1").arg(r.rating, 0, 'f', 1) : "✓ 看过");
-        rt->setAlignment(Qt::AlignCenter);
-        rt->setStyleSheet("font-size: 11px; color: #FF6000; font-weight: bold;");
-
-        cl->addStretch();
-        cl->addWidget(nm);
-        cl->addWidget(rt);
-
-        m_myCards.append(card);
-
-        if (i % cols == 0) {
-            row = new QHBoxLayout();
-            row->setSpacing(SPACING);
-            row->setAlignment(Qt::AlignLeft);
-            m_myListOuterLayout->addLayout(row);
-        }
-        row->addWidget(card);
-    }
 }
