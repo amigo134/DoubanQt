@@ -29,11 +29,13 @@ private slots:
     void onBackFromDetail();
     void onNavClicked(int index);
     void onNetworkBusy(bool busy);
+    void onLogout();
 
 private:
     void buildUI();
     void performSearch(const QString& query, int skip = 0);
     void updateSearchBoxWidth();
+    bool showLogin();
 
     ApiManager* m_api;
     DatabaseManager* m_db;

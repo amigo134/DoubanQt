@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "logindialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QWidget>
@@ -8,6 +9,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QMovie>
 #include <QKeyEvent>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -15,6 +17,20 @@ MainWindow::MainWindow(QWidget* parent)
     , m_db(new DatabaseManager(this))
 {
     m_db->initialize();
+
+    if (!m_db->isReady()) {
+        QMessageBox::critical(nullptr, "数据库错误",
+            "无法打开或创建数据库，请检查程序是否有写入权限。\n\n"
+            "数据库路径通常位于：\n"
+            "C:/Users/<用户名>/AppData/Local/DoubanQt/DoubanQt/");
+        QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
+        return;
+    }
+
+    if (!showLogin()) {
+        QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
+        return;
+    }
 
     setWindowTitle("影视 - 基于 WMDB");
     setMinimumSize(940, 680);
@@ -57,6 +73,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(m_profileWidget, &ProfileWidget::movieClicked,
             this, &MainWindow::onMovieClicked);
+    connect(m_profileWidget, &ProfileWidget::logoutRequested,
+            this, &MainWindow::onLogout);
 }
 
 void MainWindow::buildUI()
@@ -326,6 +344,54 @@ void MainWindow::onNavClicked(int index)
 void MainWindow::onNetworkBusy(bool busy)
 {
     m_loadingLabel->setVisible(busy);
+}
+
+void MainWindow::onLogout()
+{
+    if (!showLogin()) {
+        QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
+        return;
+    }
+    m_homeWidget->refresh();
+    m_profileWidget->refresh();
+    m_stackedWidget->setCurrentIndex(HOME);
+    onNavClicked(HOME);
+}
+
+bool MainWindow::showLogin()
+{
+    while (true) {
+        LoginDialog dlg;
+        if (!m_db->hasUsers()) {
+            dlg.switchToRegister();
+        }
+        if (dlg.exec() != QDialog::Accepted) return false;
+
+        QString username = dlg.getUsername();
+        QString password = dlg.getPassword();
+
+        if (!m_db->isReady()) {
+            QMessageBox::critical(nullptr, "数据库错误",
+                "数据库不可用，无法登录。请重启程序重试。");
+            return false;
+        }
+
+        if (dlg.isRegister()) {
+            int id = m_db->registerUser(username, password);
+            if (id > 0) {
+                m_db->setCurrentUser(id);
+                return true;
+            }
+            QMessageBox::warning(nullptr, "注册失败", "用户名已存在，请换一个");
+        } else {
+            int id = m_db->loginUser(username, password);
+            if (id > 0) {
+                m_db->setCurrentUser(id);
+                return true;
+            }
+            QMessageBox::warning(nullptr, "登录失败", "用户名或密码错误");
+        }
+    }
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)

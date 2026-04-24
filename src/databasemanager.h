@@ -10,6 +10,13 @@ public:
     ~DatabaseManager();
 
     bool initialize();
+    bool isReady() const;
+    bool hasUsers();
+    int registerUser(const QString& username, const QString& password);
+    int loginUser(const QString& username, const QString& password);
+    void setCurrentUser(int userId);
+    int currentUserId() const;
+    QString currentUsername();
 
     bool saveReview(const UserReview& review);
     UserReview getReview(const QString& doubanId);
@@ -27,8 +34,11 @@ public:
     QString getAvatarPath();
     void saveProfile(const QString& name, const QString& bio);
     void saveAvatarPath(const QString& path);
+    void ensureProfile();
 
 private:
     QSqlDatabase m_db;
+    int m_currentUserId = 0;
+    bool m_ready = false;
     bool createTables();
 };

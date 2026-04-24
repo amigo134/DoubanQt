@@ -26,6 +26,7 @@ set(SOURCES
     src/imagecache.cpp
     src/profilewidget.cpp
     src/profileeditdialog.cpp
+    src/logindialog.cpp
 )
 
 set(HEADERS
@@ -42,6 +43,7 @@ set(HEADERS
     src/moviemodel.h
     src/profilewidget.h
     src/profileeditdialog.h
+    src/logindialog.h
 )
 
 set(RESOURCES

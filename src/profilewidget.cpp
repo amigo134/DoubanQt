@@ -169,6 +169,29 @@ void ProfileWidget::buildUI()
     m_reviewOuterLayout->addWidget(m_reviewEmptyLabel);
 
     root->addWidget(m_reviewWrap);
+
+    auto* logoutBtn = new QPushButton("退出登录");
+    logoutBtn->setFixedHeight(40);
+    logoutBtn->setMaximumWidth(200);
+    logoutBtn->setStyleSheet(R"(
+        QPushButton {
+            background: white;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        QPushButton:hover { background: #e74c3c; color: white; }
+    )");
+    connect(logoutBtn, &QPushButton::clicked, this, &ProfileWidget::logoutRequested);
+
+    auto* logoutWrap = new QHBoxLayout();
+    logoutWrap->addStretch();
+    logoutWrap->addWidget(logoutBtn);
+    logoutWrap->addStretch();
+    root->addLayout(logoutWrap);
+
     root->addStretch();
 
     auto* outer = new QVBoxLayout(this);
@@ -498,6 +521,7 @@ void ProfileWidget::loadProfile()
 {
     QString name = m_db->getProfileName();
     QString bio = m_db->getProfileBio();
+    qDebug() << "loadProfile: name=" << name << "bio=" << bio << "userId=" << m_db->currentUserId();
     m_nameLabel->setText(name.isEmpty() ? "影迷" : name);
     m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
 

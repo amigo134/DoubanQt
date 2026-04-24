@@ -6,7 +6,7 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
 
-    app.setApplicationName("影视");
+    app.setApplicationName("DoubanQt");
     app.setApplicationVersion("2.0.0");
     app.setOrganizationName("DoubanQt");
 

@@ -19,6 +19,7 @@ public:
 
 signals:
     void movieClicked(const Movie& movie);
+    void logoutRequested();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;

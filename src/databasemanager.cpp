@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QDebug>
 #include <QDateTime>
+#include <QCryptographicHash>
+#include <QCoreApplication>
 
 DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
@@ -20,28 +22,60 @@ DatabaseManager::~DatabaseManager()
 
 bool DatabaseManager::initialize()
 {
-    QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString dataPath = QCoreApplication::applicationDirPath();
     QDir().mkpath(dataPath);
     QString dbPath = dataPath + "/doubanqt.db";
+    qDebug() << "Database path:" << dbPath;
 
-    m_db = QSqlDatabase::addDatabase("QSQLITE");
+    if (QSqlDatabase::contains(QSqlDatabase::defaultConnection)) {
+        m_db = QSqlDatabase::database(QSqlDatabase::defaultConnection);
+    } else {
+        m_db = QSqlDatabase::addDatabase("QSQLITE");
+    }
     m_db.setDatabaseName(dbPath);
 
     if (!m_db.open()) {
         qWarning() << "无法打开数据库:" << m_db.lastError().text();
+        m_ready = false;
         return false;
     }
 
-    return createTables();
+    m_ready = createTables();
+    return m_ready;
+}
+
+bool DatabaseManager::isReady() const
+{
+    return m_ready && m_db.isOpen();
+}
+
+bool DatabaseManager::hasUsers()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.exec("SELECT COUNT(*) FROM users");
+    if (query.next()) return query.value(0).toInt() > 0;
+    return false;
 }
 
 bool DatabaseManager::createTables()
 {
     QSqlQuery query(m_db);
+
+    query.exec(R"(
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at TEXT
+        )
+    )");
+
     bool ok = query.exec(R"(
         CREATE TABLE IF NOT EXISTS reviews (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            douban_id TEXT UNIQUE NOT NULL,
+            user_id INTEGER DEFAULT 1,
+            douban_id TEXT NOT NULL,
             movie_name TEXT,
             rating REAL DEFAULT 0,
             content TEXT,
@@ -49,7 +83,8 @@ bool DatabaseManager::createTables()
             is_watched INTEGER DEFAULT 0,
             poster_url TEXT,
             create_time TEXT,
-            update_time TEXT
+            update_time TEXT,
+            UNIQUE(user_id, douban_id)
         )
     )");
 
@@ -58,28 +93,101 @@ bool DatabaseManager::createTables()
         return false;
     }
 
+    query.exec("ALTER TABLE reviews ADD COLUMN user_id INTEGER DEFAULT 1");
     query.exec("ALTER TABLE reviews ADD COLUMN poster_url TEXT");
 
     query.exec(R"(
         CREATE TABLE IF NOT EXISTS user_profile (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
+            user_id INTEGER PRIMARY KEY,
             name TEXT DEFAULT '影迷',
-            bio TEXT DEFAULT '记录每一部看过的电影'
+            bio TEXT DEFAULT '记录每一部看过的电影',
+            avatar_path TEXT
         )
     )");
-    query.exec("INSERT OR IGNORE INTO user_profile (id, name, bio) VALUES (1, '影迷', '记录每一部看过的电影')");
-    query.exec("ALTER TABLE user_profile ADD COLUMN avatar_path TEXT");
 
     return true;
 }
 
+static QString hashPassword(const QString& password)
+{
+    return QString(QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+int DatabaseManager::registerUser(const QString& username, const QString& password)
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT id FROM users WHERE username = :name");
+    query.bindValue(":name", username);
+    if (query.exec() && query.next()) return 0;
+
+    query.prepare("INSERT INTO users (username, password, created_at) VALUES (:name, :pwd, :time)");
+    query.bindValue(":name", username);
+    query.bindValue(":pwd", hashPassword(password));
+    query.bindValue(":time", QDateTime::currentDateTime().toString(Qt::ISODate));
+    if (query.exec()) return query.lastInsertId().toInt();
+    return 0;
+}
+
+int DatabaseManager::loginUser(const QString& username, const QString& password)
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT id FROM users WHERE username = :name AND password = :pwd");
+    query.bindValue(":name", username);
+    query.bindValue(":pwd", hashPassword(password));
+    if (query.exec() && query.next()) return query.value(0).toInt();
+    return 0;
+}
+
+void DatabaseManager::setCurrentUser(int userId)
+{
+    m_currentUserId = userId;
+    ensureProfile();
+}
+
+int DatabaseManager::currentUserId() const
+{
+    return m_currentUserId;
+}
+
+QString DatabaseManager::currentUsername()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT username FROM users WHERE id = :id");
+    query.bindValue(":id", m_currentUserId);
+    if (query.exec() && query.next())
+        return query.value(0).toString();
+    return QString();
+}
+
+void DatabaseManager::ensureProfile()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery check(m_db);
+    check.prepare("SELECT user_id FROM user_profile WHERE user_id = :id");
+    check.bindValue(":id", m_currentUserId);
+    if (check.exec() && check.next()) return;
+    QString defaultName = currentUsername();
+    if (defaultName.isEmpty()) defaultName = "影迷";
+    QSqlQuery ins(m_db);
+    ins.prepare("INSERT INTO user_profile (user_id, name, bio, avatar_path) VALUES (:id, :name, '记录每一部看过的电影', NULL)");
+    ins.bindValue(":id", m_currentUserId);
+    ins.bindValue(":name", defaultName);
+    if (!ins.exec()) {
+        qWarning() << "ensureProfile insert failed:" << ins.lastError().text();
+    }
+}
+
 bool DatabaseManager::saveReview(const UserReview& review)
 {
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, rating, content, is_wished, is_watched, poster_url, create_time, update_time)
-        VALUES (:douban_id, :movie_name, :rating, :content, :is_wished, :is_watched, :poster_url, :create_time, :update_time)
-        ON CONFLICT(douban_id) DO UPDATE SET
+        INSERT INTO reviews (user_id, douban_id, movie_name, rating, content, is_wished, is_watched, poster_url, create_time, update_time)
+        VALUES (:user_id, :douban_id, :movie_name, :rating, :content, :is_wished, :is_watched, :poster_url, :create_time, :update_time)
+        ON CONFLICT(user_id, douban_id) DO UPDATE SET
             movie_name = :movie_name2,
             rating = :rating2,
             content = :content2,
@@ -90,6 +198,7 @@ bool DatabaseManager::saveReview(const UserReview& review)
     )");
 
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    query.bindValue(":user_id", m_currentUserId);
     query.bindValue(":douban_id", review.doubanId);
     query.bindValue(":movie_name", review.movieName);
     query.bindValue(":rating", review.rating);
@@ -117,8 +226,10 @@ bool DatabaseManager::saveReview(const UserReview& review)
 UserReview DatabaseManager::getReview(const QString& doubanId)
 {
     UserReview review;
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    query.prepare("SELECT * FROM reviews WHERE douban_id = :id");
+    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND douban_id = :id");
+    query.bindValue(":uid", m_currentUserId);
     query.bindValue(":id", doubanId);
 
     if (query.exec() && query.next()) {
@@ -138,8 +249,11 @@ UserReview DatabaseManager::getReview(const QString& doubanId)
 QList<UserReview> DatabaseManager::getAllReviews()
 {
     QList<UserReview> reviews;
-    QSqlQuery query("SELECT * FROM reviews ORDER BY update_time DESC", m_db);
-
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT * FROM reviews WHERE user_id = :uid ORDER BY update_time DESC");
+    query.bindValue(":uid", m_currentUserId);
+    query.exec();
     while (query.next()) {
         UserReview review;
         review.id = query.value("id").toInt();
@@ -160,7 +274,9 @@ QString DatabaseManager::getProfileName()
 {
     if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    if (query.exec("SELECT name FROM user_profile WHERE id = 1") && query.next())
+    query.prepare("SELECT name FROM user_profile WHERE user_id = :id");
+    query.bindValue(":id", m_currentUserId);
+    if (query.exec() && query.next())
         return query.value(0).toString();
     return "影迷";
 }
@@ -169,7 +285,9 @@ QString DatabaseManager::getProfileBio()
 {
     if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    if (query.exec("SELECT bio FROM user_profile WHERE id = 1") && query.next())
+    query.prepare("SELECT bio FROM user_profile WHERE user_id = :id");
+    query.bindValue(":id", m_currentUserId);
+    if (query.exec() && query.next())
         return query.value(0).toString();
     return "记录每一部看过的电影";
 }
@@ -177,10 +295,13 @@ QString DatabaseManager::getProfileBio()
 void DatabaseManager::saveProfile(const QString& name, const QString& bio)
 {
     if (!m_db.isOpen()) m_db.open();
+    ensureProfile();
     QSqlQuery query(m_db);
-    query.prepare("INSERT OR REPLACE INTO user_profile (id, name, bio) VALUES (1, :name, :bio)");
+    query.prepare("INSERT OR REPLACE INTO user_profile (user_id, name, bio, avatar_path) VALUES (:id, :name, :bio, (SELECT avatar_path FROM user_profile WHERE user_id = :id2))");
+    query.bindValue(":id", m_currentUserId);
     query.bindValue(":name", name);
     query.bindValue(":bio", bio);
+    query.bindValue(":id2", m_currentUserId);
     query.exec();
 }
 
@@ -188,7 +309,9 @@ QString DatabaseManager::getAvatarPath()
 {
     if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    if (query.exec("SELECT avatar_path FROM user_profile WHERE id = 1") && query.next())
+    query.prepare("SELECT avatar_path FROM user_profile WHERE user_id = :id");
+    query.bindValue(":id", m_currentUserId);
+    if (query.exec() && query.next())
         return query.value(0).toString();
     return QString();
 }
@@ -196,16 +319,20 @@ QString DatabaseManager::getAvatarPath()
 void DatabaseManager::saveAvatarPath(const QString& path)
 {
     if (!m_db.isOpen()) m_db.open();
+    ensureProfile();
     QSqlQuery query(m_db);
-    query.prepare("UPDATE user_profile SET avatar_path = :path WHERE id = 1");
+    query.prepare("UPDATE user_profile SET avatar_path = :path WHERE user_id = :id");
     query.bindValue(":path", path);
+    query.bindValue(":id", m_currentUserId);
     query.exec();
 }
 
 bool DatabaseManager::deleteReview(const QString& doubanId)
 {
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    query.prepare("DELETE FROM reviews WHERE douban_id = :id");
+    query.prepare("DELETE FROM reviews WHERE user_id = :uid AND douban_id = :id");
+    query.bindValue(":uid", m_currentUserId);
     query.bindValue(":id", doubanId);
     return query.exec();
 }
@@ -213,22 +340,26 @@ bool DatabaseManager::deleteReview(const QString& doubanId)
 void DatabaseManager::updatePosterUrl(const QString& doubanId, const QString& posterUrl)
 {
     if (posterUrl.isEmpty()) return;
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
-    query.prepare("UPDATE reviews SET poster_url = :poster WHERE douban_id = :id AND (poster_url IS NULL OR poster_url = '')");
+    query.prepare("UPDATE reviews SET poster_url = :poster WHERE user_id = :uid AND douban_id = :id AND (poster_url IS NULL OR poster_url = '')");
     query.bindValue(":poster", posterUrl);
+    query.bindValue(":uid", m_currentUserId);
     query.bindValue(":id", doubanId);
     query.exec();
 }
 
 bool DatabaseManager::setWished(const QString& doubanId, const QString& movieName, bool wished, const QString& posterUrl)
 {
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, is_wished, poster_url, create_time, update_time)
-        VALUES (:id, :name, :wished, :poster, :time, :time2)
-        ON CONFLICT(douban_id) DO UPDATE SET is_wished = :wished2, poster_url = :poster2, update_time = :time3
+        INSERT INTO reviews (user_id, douban_id, movie_name, is_wished, poster_url, create_time, update_time)
+        VALUES (:uid, :id, :name, :wished, :poster, :time, :time2)
+        ON CONFLICT(user_id, douban_id) DO UPDATE SET is_wished = :wished2, poster_url = :poster2, update_time = :time3
     )");
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    query.bindValue(":uid", m_currentUserId);
     query.bindValue(":id", doubanId);
     query.bindValue(":name", movieName);
     query.bindValue(":wished", wished ? 1 : 0);
@@ -243,13 +374,15 @@ bool DatabaseManager::setWished(const QString& doubanId, const QString& movieNam
 
 bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieName, bool watched, const QString& posterUrl)
 {
+    if (!m_db.isOpen()) m_db.open();
     QSqlQuery query(m_db);
     query.prepare(R"(
-        INSERT INTO reviews (douban_id, movie_name, is_watched, poster_url, create_time, update_time)
-        VALUES (:id, :name, :watched, :poster, :time, :time2)
-        ON CONFLICT(douban_id) DO UPDATE SET is_watched = :watched2, poster_url = :poster2, update_time = :time3
+        INSERT INTO reviews (user_id, douban_id, movie_name, is_watched, poster_url, create_time, update_time)
+        VALUES (:uid, :id, :name, :watched, :poster, :time, :time2)
+        ON CONFLICT(user_id, douban_id) DO UPDATE SET is_watched = :watched2, poster_url = :poster2, update_time = :time3
     )");
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    query.bindValue(":uid", m_currentUserId);
     query.bindValue(":id", doubanId);
     query.bindValue(":name", movieName);
     query.bindValue(":watched", watched ? 1 : 0);
@@ -265,7 +398,11 @@ bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieNa
 QList<UserReview> DatabaseManager::getWishList()
 {
     QList<UserReview> reviews;
-    QSqlQuery query("SELECT * FROM reviews WHERE is_wished = 1 ORDER BY update_time DESC", m_db);
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND is_wished = 1 ORDER BY update_time DESC");
+    query.bindValue(":uid", m_currentUserId);
+    query.exec();
     while (query.next()) {
         UserReview review;
         review.doubanId = query.value("douban_id").toString();
@@ -282,7 +419,11 @@ QList<UserReview> DatabaseManager::getWishList()
 QList<UserReview> DatabaseManager::getWatchedList()
 {
     QList<UserReview> reviews;
-    QSqlQuery query("SELECT * FROM reviews WHERE is_watched = 1 ORDER BY update_time DESC", m_db);
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND is_watched = 1 ORDER BY update_time DESC");
+    query.bindValue(":uid", m_currentUserId);
+    query.exec();
     while (query.next()) {
         UserReview review;
         review.doubanId = query.value("douban_id").toString();
