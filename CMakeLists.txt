@@ -7,10 +7,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Qt5 路径（mingw 版本）
 set(CMAKE_PREFIX_PATH "C:/Qt/5.15.2/mingw81_64")
 
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network Sql)
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network Sql WebSockets)
 
 set(SOURCES
     src/main.cpp
@@ -27,6 +26,8 @@ set(SOURCES
     src/profilewidget.cpp
     src/profileeditdialog.cpp
     src/logindialog.cpp
+    src/chatmanager.cpp
+    src/friendswidget.cpp
 )
 
 set(HEADERS
@@ -44,6 +45,9 @@ set(HEADERS
     src/profilewidget.h
     src/profileeditdialog.h
     src/logindialog.h
+    src/chatmodel.h
+    src/chatmanager.h
+    src/friendswidget.h
 )
 
 set(RESOURCES
@@ -62,6 +66,9 @@ target_link_libraries(DoubanQt PRIVATE
     Qt5::Widgets
     Qt5::Network
     Qt5::Sql
+    Qt5::WebSockets
 )
 
 target_include_directories(DoubanQt PRIVATE src)
+
+add_subdirectory(server)

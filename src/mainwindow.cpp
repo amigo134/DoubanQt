@@ -16,6 +16,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_api(new ApiManager(this))
     , m_db(new DatabaseManager(this))
+    , m_chatMgr(new ChatManager(this))
 {
     m_db->initialize();
 
@@ -38,6 +39,14 @@ MainWindow::MainWindow(QWidget* parent)
     resize(1100, 760);
 
     buildUI();
+
+    QSettings loginSettings(QCoreApplication::applicationDirPath() + "/config.ini",
+                            QSettings::IniFormat);
+    QString chatUser = loginSettings.value("login/username", "").toString();
+    QString chatPwd = loginSettings.value("login/password", "").toString();
+    if (!chatUser.isEmpty()) {
+        m_chatMgr->connectToServer(chatUser, chatPwd);
+    }
 
     connect(m_api, &ApiManager::searchResultReady,
             this, &MainWindow::onSearchResultReady);
@@ -123,6 +132,7 @@ void MainWindow::buildUI()
 
     m_navHome = new QPushButton("首页");
     m_navSearch = new QPushButton("搜索结果");
+    m_navChat = new QPushButton("消息");
     m_navProfile = new QPushButton("我的");
     auto navStyle = [](bool active) {
         return QString(R"(
@@ -145,14 +155,17 @@ void MainWindow::buildUI()
     m_navHome->setStyleSheet(navStyle(true));
     m_navSearch->setStyleSheet(navStyle(false));
     m_navSearch->setVisible(false);
+    m_navChat->setStyleSheet(navStyle(false));
     m_navProfile->setStyleSheet(navStyle(false));
 
     connect(m_navHome, &QPushButton::clicked, this, [this]() { onNavClicked(HOME); });
     connect(m_navSearch, &QPushButton::clicked, this, [this]() { onNavClicked(SEARCH); });
+    connect(m_navChat, &QPushButton::clicked, this, [this]() { onNavClicked(CHAT); });
     connect(m_navProfile, &QPushButton::clicked, this, [this]() { onNavClicked(PROFILE); });
 
     headerLayout->addWidget(m_navHome);
     headerLayout->addWidget(m_navSearch);
+    headerLayout->addWidget(m_navChat);
     headerLayout->addWidget(m_navProfile);
 
     headerLayout->addStretch();
@@ -231,11 +244,13 @@ void MainWindow::buildUI()
     m_homeWidget = new HomeWidget(m_db, this);
     m_searchResultWidget = new SearchResultWidget(this);
     m_detailWidget = new MovieDetailWidget(m_db, this);
+    m_friendsWidget = new FriendsWidget(m_chatMgr, this);
     m_profileWidget = new ProfileWidget(m_db, this);
 
     m_stackedWidget->addWidget(m_homeWidget);
     m_stackedWidget->addWidget(m_searchResultWidget);
     m_stackedWidget->addWidget(m_detailWidget);
+    m_stackedWidget->addWidget(m_friendsWidget);
     m_stackedWidget->addWidget(m_profileWidget);
 
     m_stackedWidget->setCurrentIndex(HOME);
@@ -333,6 +348,7 @@ void MainWindow::onNavClicked(int index)
     )";
     m_navHome->setStyleSheet(index == HOME ? activeStyle : inactiveStyle);
     m_navSearch->setStyleSheet(index == SEARCH ? activeStyle : inactiveStyle);
+    m_navChat->setStyleSheet(index == CHAT ? activeStyle : inactiveStyle);
     m_navProfile->setStyleSheet(index == PROFILE ? activeStyle : inactiveStyle);
 
     if (index == HOME) {
@@ -361,6 +377,14 @@ void MainWindow::onLogout()
     m_profileWidget->refresh();
     m_stackedWidget->setCurrentIndex(HOME);
     onNavClicked(HOME);
+
+    QSettings loginSettings(QCoreApplication::applicationDirPath() + "/config.ini",
+                            QSettings::IniFormat);
+    QString chatUser = loginSettings.value("login/username", "").toString();
+    QString chatPwd = loginSettings.value("login/password", "").toString();
+    if (!chatUser.isEmpty()) {
+        m_chatMgr->connectToServer(chatUser, chatPwd);
+    }
 }
 
 bool MainWindow::showLogin()
