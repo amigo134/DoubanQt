@@ -1,10 +1,12 @@
 #include "profilewidget.h"
+#include "profileeditdialog.h"
 #include "imagecache.h"
 #include <QFrame>
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
 #include <QScrollBar>
+#include <QDebug>
 
 ProfileWidget::ProfileWidget(DatabaseManager* db, QWidget* parent)
     : QWidget(parent)
@@ -40,11 +42,12 @@ void ProfileWidget::buildUI()
     root->setContentsMargins(24, 20, 24, 20);
     root->setSpacing(18);
 
-    auto* profileCard = new QFrame();
-    profileCard->setStyleSheet(R"(
+    m_profileCard = new QFrame();
+    m_profileCard->setMaximumWidth(600);
+    m_profileCard->setStyleSheet(R"(
         QFrame { background: white; border-radius: 12px; border: 1px solid #EEE; }
     )");
-    auto* profileLayout = new QHBoxLayout(profileCard);
+    auto* profileLayout = new QHBoxLayout(m_profileCard);
     profileLayout->setContentsMargins(28, 24, 28, 24);
     profileLayout->setSpacing(20);
 
@@ -64,21 +67,17 @@ void ProfileWidget::buildUI()
     infoCol->setSpacing(4);
 
     m_nameLabel = new QLabel("影迷");
+    m_nameLabel->setCursor(Qt::PointingHandCursor);
+    m_nameLabel->installEventFilter(this);
     m_nameLabel->setStyleSheet("font-size: 20px; font-weight: bold; color: #222;");
 
     m_bioLabel = new QLabel("记录每一部看过的电影");
+    m_bioLabel->setCursor(Qt::PointingHandCursor);
+    m_bioLabel->installEventFilter(this);
     m_bioLabel->setStyleSheet("font-size: 13px; color: #999;");
 
     infoCol->addWidget(m_nameLabel);
     infoCol->addWidget(m_bioLabel);
-    infoCol->addStretch();
-
-    profileLayout->addWidget(m_avatarLabel);
-    profileLayout->addLayout(infoCol);
-    profileLayout->addStretch();
-
-    auto* statRow = new QHBoxLayout();
-    statRow->setSpacing(0);
 
     auto makeStatBlock = [](const QString& label, QLabel*& valueLabel, const QString& color) {
         auto* col = new QVBoxLayout();
@@ -96,24 +95,22 @@ void ProfileWidget::buildUI()
         return w;
     };
 
+    auto* statRow = new QHBoxLayout();
+    statRow->setSpacing(0);
     statRow->addWidget(makeStatBlock("看过", m_statWatched, "#00B51D"));
     statRow->addWidget(makeStatBlock("想看", m_statWished, "#F5A623"));
     statRow->addWidget(makeStatBlock("评价", m_statReviews, "#5B7FFF"));
 
-    auto* statCard = new QFrame();
-    statCard->setStyleSheet("QFrame { background: white; border-radius: 12px; border: 1px solid #EEE; }");
-    auto* statLayout = new QHBoxLayout(statCard);
-    statLayout->setContentsMargins(12, 16, 12, 16);
-    for (int i = 0; i < statRow->count(); ++i) {
-        auto* w = statRow->itemAt(i)->widget();
-        statRow->removeWidget(w);
-        statLayout->addWidget(w);
-        --i;
-    }
-    delete statRow;
+    profileLayout->addWidget(m_avatarLabel);
+    profileLayout->addLayout(infoCol);
+    profileLayout->addStretch();
+    profileLayout->addLayout(statRow);
 
-    root->addWidget(profileCard);
-    root->addWidget(statCard);
+    auto* profileWrap = new QHBoxLayout();
+    profileWrap->addStretch();
+    profileWrap->addWidget(m_profileCard);
+    profileWrap->addStretch();
+    root->addLayout(profileWrap);
 
     auto* wishTitle = new QLabel("想看");
     wishTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #F5A623; padding-left: 8px;");
@@ -174,6 +171,7 @@ void ProfileWidget::buildUI()
 
 void ProfileWidget::refresh()
 {
+    loadProfile();
     loadData();
 }
 
@@ -440,6 +438,13 @@ void ProfileWidget::resizeEvent(QResizeEvent* event)
 bool ProfileWidget::eventFilter(QObject* watched, QEvent* event)
 {
     if (event->type() == QEvent::MouseButtonRelease) {
+        if (watched == m_nameLabel || watched == m_bioLabel) {
+            ProfileEditDialog dlg(m_nameLabel->text(), m_bioLabel->text(), this);
+            if (dlg.exec() == QDialog::Accepted) {
+                saveProfile(dlg.getName(), dlg.getBio());
+            }
+            return true;
+        }
         int idx = m_wishCards.indexOf(qobject_cast<QFrame*>(watched));
         if (idx >= 0 && idx < m_wishData.size()) {
             Movie m;
@@ -466,4 +471,23 @@ bool ProfileWidget::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void ProfileWidget::loadProfile()
+{
+    QString name = m_db->getProfileName();
+    QString bio = m_db->getProfileBio();
+    m_nameLabel->setText(name.isEmpty() ? "影迷" : name);
+    m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
+    if (!name.isEmpty()) {
+        m_avatarLabel->setText(name.left(1).toUpper());
+    }
+}
+
+void ProfileWidget::saveProfile(const QString& name, const QString& bio)
+{
+    m_db->saveProfile(name, bio);
+    m_nameLabel->setText(name);
+    m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
+    m_avatarLabel->setText(name.left(1).toUpper());
 }

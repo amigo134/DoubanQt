@@ -236,17 +236,7 @@ void MainWindow::performSearch(const QString& query, int skip)
         m_searchResultWidget->showLoading(true);
         m_stackedWidget->setCurrentIndex(SEARCH);
         m_navSearch->setVisible(true);
-        m_navSearch->setStyleSheet(R"(
-            QPushButton {
-                background: #E8F5E9;
-                color: #00B51D;
-                border: none;
-                border-radius: 6px;
-                padding: 6px 16px;
-                font-size: 13px;
-                font-weight: bold;
-            }
-        )");
+        onNavClicked(SEARCH);
     }
     m_api->searchMovies(query, QString(), 0, 20, skip);
 }

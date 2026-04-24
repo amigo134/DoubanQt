@@ -22,6 +22,10 @@ public:
     QList<UserReview> getWishList();
     QList<UserReview> getWatchedList();
 
+    QString getProfileName();
+    QString getProfileBio();
+    void saveProfile(const QString& name, const QString& bio);
+
 private:
     QSqlDatabase m_db;
     bool createTables();

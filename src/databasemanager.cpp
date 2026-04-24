@@ -60,6 +60,15 @@ bool DatabaseManager::createTables()
 
     query.exec("ALTER TABLE reviews ADD COLUMN poster_url TEXT");
 
+    query.exec(R"(
+        CREATE TABLE IF NOT EXISTS user_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            name TEXT DEFAULT '影迷',
+            bio TEXT DEFAULT '记录每一部看过的电影'
+        )
+    )");
+    query.exec("INSERT OR IGNORE INTO user_profile (id, name, bio) VALUES (1, '影迷', '记录每一部看过的电影')");
+
     return true;
 }
 
@@ -146,6 +155,33 @@ QList<UserReview> DatabaseManager::getAllReviews()
     return reviews;
 }
 
+QString DatabaseManager::getProfileName()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    if (query.exec("SELECT name FROM user_profile WHERE id = 1") && query.next())
+        return query.value(0).toString();
+    return "影迷";
+}
+
+QString DatabaseManager::getProfileBio()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    if (query.exec("SELECT bio FROM user_profile WHERE id = 1") && query.next())
+        return query.value(0).toString();
+    return "记录每一部看过的电影";
+}
+
+void DatabaseManager::saveProfile(const QString& name, const QString& bio)
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("INSERT OR REPLACE INTO user_profile (id, name, bio) VALUES (1, :name, :bio)");
+    query.bindValue(":name", name);
+    query.bindValue(":bio", bio);
+    query.exec();
+}
 bool DatabaseManager::deleteReview(const QString& doubanId)
 {
     QSqlQuery query(m_db);

@@ -27,6 +27,8 @@ protected:
 private:
     void buildUI();
     void loadData();
+    void loadProfile();
+    void saveProfile(const QString& name, const QString& bio);
     void rebuildWishRows();
     void rebuildWatchedRows();
     void rebuildReviewRows();
@@ -41,6 +43,7 @@ private:
     QLabel* m_statWatched;
     QLabel* m_statWished;
     QLabel* m_statReviews;
+    QFrame* m_profileCard;
 
     QWidget* m_wishWrap;
     QVBoxLayout* m_wishOuterLayout;
