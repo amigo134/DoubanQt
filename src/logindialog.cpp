@@ -7,7 +7,7 @@ LoginDialog::LoginDialog(QWidget* parent)
     : QDialog(parent)
 {
     setWindowTitle("登录");
-    setFixedSize(380, 420);
+    setFixedSize(380, 460);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     auto* root = new QVBoxLayout(this);
@@ -69,6 +69,27 @@ void LoginDialog::setupLoginPage()
     m_loginPwd->setFixedHeight(42);
     m_loginPwd->setStyleSheet(m_loginUser->styleSheet());
     layout->addWidget(m_loginPwd);
+
+    auto* checkRow = new QHBoxLayout();
+    checkRow->setSpacing(20);
+    m_rememberCheck = new QCheckBox("记住密码");
+    m_rememberCheck->setStyleSheet("QCheckBox { font-size: 13px; color: #666; } QCheckBox::indicator { width: 16px; height: 16px; }");
+    m_autoLoginCheck = new QCheckBox("自动登录");
+    m_autoLoginCheck->setStyleSheet(m_rememberCheck->styleSheet());
+    connect(m_rememberCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!checked) {
+            m_autoLoginCheck->setChecked(false);
+        }
+    });
+    connect(m_autoLoginCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) {
+            m_rememberCheck->setChecked(true);
+        }
+    });
+    checkRow->addWidget(m_rememberCheck);
+    checkRow->addWidget(m_autoLoginCheck);
+    checkRow->addStretch();
+    layout->addLayout(checkRow);
 
     auto* loginBtn = new QPushButton("登 录");
     loginBtn->setFixedHeight(44);
@@ -246,6 +267,24 @@ void LoginDialog::switchToRegister()
 {
     m_stack->setCurrentIndex(1);
     setWindowTitle("注册");
+}
+
+bool LoginDialog::rememberPassword() const
+{
+    return m_rememberCheck->isChecked();
+}
+
+bool LoginDialog::autoLogin() const
+{
+    return m_autoLoginCheck->isChecked();
+}
+
+void LoginDialog::setLoginInfo(const QString& user, const QString& pwd, bool remember, bool autoLogin)
+{
+    m_loginUser->setText(user);
+    m_loginPwd->setText(pwd);
+    m_rememberCheck->setChecked(remember);
+    m_autoLoginCheck->setChecked(autoLogin);
 }
 
 bool LoginDialog::eventFilter(QObject* watched, QEvent* event)

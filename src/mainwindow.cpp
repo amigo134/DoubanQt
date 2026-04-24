@@ -10,6 +10,7 @@
 #include <QMovie>
 #include <QKeyEvent>
 #include <QMessageBox>
+#include <QSettings>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -348,6 +349,10 @@ void MainWindow::onNetworkBusy(bool busy)
 
 void MainWindow::onLogout()
 {
+    QSettings settings(QCoreApplication::applicationDirPath() + "/config.ini",
+                       QSettings::IniFormat);
+    settings.setValue("login/autoLogin", false);
+
     if (!showLogin()) {
         QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
         return;
@@ -360,10 +365,30 @@ void MainWindow::onLogout()
 
 bool MainWindow::showLogin()
 {
+    QSettings settings(QCoreApplication::applicationDirPath() + "/config.ini",
+                       QSettings::IniFormat);
+
+    bool autoLoginEnabled = settings.value("login/autoLogin", false).toBool();
+    QString savedUser = settings.value("login/username", "").toString();
+    QString savedPwd = settings.value("login/password", "").toString();
+    bool savedRemember = settings.value("login/remember", false).toBool();
+
+    if (autoLoginEnabled && !savedUser.isEmpty() && !savedPwd.isEmpty() && m_db->isReady()) {
+        int id = m_db->loginUser(savedUser, savedPwd);
+        if (id > 0) {
+            m_db->setCurrentUser(id);
+            return true;
+        }
+        autoLoginEnabled = false;
+        settings.setValue("login/autoLogin", false);
+    }
+
     while (true) {
         LoginDialog dlg;
         if (!m_db->hasUsers()) {
             dlg.switchToRegister();
+        } else if (savedRemember) {
+            dlg.setLoginInfo(savedUser, savedPwd, savedRemember, autoLoginEnabled);
         }
         if (dlg.exec() != QDialog::Accepted) return false;
 
@@ -380,6 +405,10 @@ bool MainWindow::showLogin()
             int id = m_db->registerUser(username, password);
             if (id > 0) {
                 m_db->setCurrentUser(id);
+                settings.setValue("login/username", username);
+                settings.setValue("login/password", password);
+                settings.setValue("login/remember", true);
+                settings.setValue("login/autoLogin", false);
                 return true;
             }
             QMessageBox::warning(nullptr, "注册失败", "用户名已存在，请换一个");
@@ -387,6 +416,17 @@ bool MainWindow::showLogin()
             int id = m_db->loginUser(username, password);
             if (id > 0) {
                 m_db->setCurrentUser(id);
+                if (dlg.rememberPassword()) {
+                    settings.setValue("login/username", username);
+                    settings.setValue("login/password", password);
+                    settings.setValue("login/remember", true);
+                    settings.setValue("login/autoLogin", dlg.autoLogin());
+                } else {
+                    settings.setValue("login/username", "");
+                    settings.setValue("login/password", "");
+                    settings.setValue("login/remember", false);
+                    settings.setValue("login/autoLogin", false);
+                }
                 return true;
             }
             QMessageBox::warning(nullptr, "登录失败", "用户名或密码错误");
