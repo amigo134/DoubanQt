@@ -68,6 +68,7 @@ bool DatabaseManager::createTables()
         )
     )");
     query.exec("INSERT OR IGNORE INTO user_profile (id, name, bio) VALUES (1, '影迷', '记录每一部看过的电影')");
+    query.exec("ALTER TABLE user_profile ADD COLUMN avatar_path TEXT");
 
     return true;
 }
@@ -182,6 +183,25 @@ void DatabaseManager::saveProfile(const QString& name, const QString& bio)
     query.bindValue(":bio", bio);
     query.exec();
 }
+
+QString DatabaseManager::getAvatarPath()
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    if (query.exec("SELECT avatar_path FROM user_profile WHERE id = 1") && query.next())
+        return query.value(0).toString();
+    return QString();
+}
+
+void DatabaseManager::saveAvatarPath(const QString& path)
+{
+    if (!m_db.isOpen()) m_db.open();
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE user_profile SET avatar_path = :path WHERE id = 1");
+    query.bindValue(":path", path);
+    query.exec();
+}
+
 bool DatabaseManager::deleteReview(const QString& doubanId)
 {
     QSqlQuery query(m_db);

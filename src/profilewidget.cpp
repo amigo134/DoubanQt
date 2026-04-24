@@ -7,6 +7,11 @@
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QDebug>
+#include <QFileDialog>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFileInfo>
+#include <QPainterPath>
 
 ProfileWidget::ProfileWidget(DatabaseManager* db, QWidget* parent)
     : QWidget(parent)
@@ -54,6 +59,8 @@ void ProfileWidget::buildUI()
     m_avatarLabel = new QLabel();
     m_avatarLabel->setFixedSize(72, 72);
     m_avatarLabel->setAlignment(Qt::AlignCenter);
+    m_avatarLabel->setCursor(Qt::PointingHandCursor);
+    m_avatarLabel->installEventFilter(this);
     m_avatarLabel->setStyleSheet(R"(
         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00B51D, stop:1 #00D4AA);
         border-radius: 36px;
@@ -438,6 +445,20 @@ void ProfileWidget::resizeEvent(QResizeEvent* event)
 bool ProfileWidget::eventFilter(QObject* watched, QEvent* event)
 {
     if (event->type() == QEvent::MouseButtonRelease) {
+        if (watched == m_avatarLabel) {
+            QString path = QFileDialog::getOpenFileName(this, "选择头像", QString(),
+                "图片 (*.png *.jpg *.jpeg *.bmp *.gif)");
+            if (!path.isEmpty()) {
+                QString dataPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+                QDir().mkpath(dataPath);
+                QString dest = dataPath + "/avatar" + QFileInfo(path).suffix().prepend('.');
+                QFile::remove(dest);
+                QFile::copy(path, dest);
+                m_db->saveAvatarPath(dest);
+                loadAvatar(dest);
+            }
+            return true;
+        }
         if (watched == m_nameLabel || watched == m_bioLabel) {
             ProfileEditDialog dlg(m_nameLabel->text(), m_bioLabel->text(), this);
             if (dlg.exec() == QDialog::Accepted) {
@@ -479,9 +500,43 @@ void ProfileWidget::loadProfile()
     QString bio = m_db->getProfileBio();
     m_nameLabel->setText(name.isEmpty() ? "影迷" : name);
     m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
-    if (!name.isEmpty()) {
-        m_avatarLabel->setText(name.left(1).toUpper());
+
+    QString avatarPath = m_db->getAvatarPath();
+    if (!avatarPath.isEmpty() && QFile::exists(avatarPath)) {
+        loadAvatar(avatarPath);
+    } else {
+        m_avatarLabel->setPixmap(QPixmap());
+        m_avatarLabel->setText(name.isEmpty() ? "U" : name.left(1).toUpper());
+        m_avatarLabel->setStyleSheet(R"(
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00B51D, stop:1 #00D4AA);
+            border-radius: 36px;
+            font-size: 28px;
+            color: white;
+            font-weight: bold;
+        )");
     }
+}
+
+void ProfileWidget::loadAvatar(const QString& path)
+{
+    QPixmap pix(path);
+    if (pix.isNull()) return;
+    int size = m_avatarLabel->width();
+    QPixmap scaled = pix.scaled(size, size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    QPixmap rounded(size, size);
+    rounded.fill(Qt::transparent);
+    QPainter p(&rounded);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPainterPath clip;
+    clip.addEllipse(0, 0, size, size);
+    p.setClipPath(clip);
+    int x = (size - scaled.width()) / 2;
+    int y = (size - scaled.height()) / 2;
+    p.drawPixmap(x, y, scaled);
+    p.end();
+    m_avatarLabel->setPixmap(rounded);
+    m_avatarLabel->setText(QString());
+    m_avatarLabel->setStyleSheet("background: transparent; border-radius: 36px;");
 }
 
 void ProfileWidget::saveProfile(const QString& name, const QString& bio)
@@ -489,5 +544,16 @@ void ProfileWidget::saveProfile(const QString& name, const QString& bio)
     m_db->saveProfile(name, bio);
     m_nameLabel->setText(name);
     m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
-    m_avatarLabel->setText(name.left(1).toUpper());
+    QString avatarPath = m_db->getAvatarPath();
+    if (avatarPath.isEmpty() || !QFile::exists(avatarPath)) {
+        m_avatarLabel->setPixmap(QPixmap());
+        m_avatarLabel->setText(name.left(1).toUpper());
+        m_avatarLabel->setStyleSheet(R"(
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00B51D, stop:1 #00D4AA);
+            border-radius: 36px;
+            font-size: 28px;
+            color: white;
+            font-weight: bold;
+        )");
+    }
 }

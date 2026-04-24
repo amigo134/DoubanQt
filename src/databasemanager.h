@@ -24,7 +24,9 @@ public:
 
     QString getProfileName();
     QString getProfileBio();
+    QString getAvatarPath();
     void saveProfile(const QString& name, const QString& bio);
+    void saveAvatarPath(const QString& path);
 
 private:
     QSqlDatabase m_db;

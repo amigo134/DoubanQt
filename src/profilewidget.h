@@ -28,6 +28,7 @@ private:
     void buildUI();
     void loadData();
     void loadProfile();
+    void loadAvatar(const QString& path);
     void saveProfile(const QString& name, const QString& bio);
     void rebuildWishRows();
     void rebuildWatchedRows();
