@@ -518,7 +518,7 @@ void FriendsWidget::showTopLoadingIndicator()
 
     m_loadingIndicator = new LoadingWidget(m_chatListView->viewport());
     m_loadingIndicator->setWidth(m_chatListView->viewport()->width());
-    m_loadingIndicator->setGeometry(0, 0, m_chatListView->viewport()->width(), 36);
+    m_loadingIndicator->setGeometry(0, 0, m_chatListView->viewport()->width(), 44);
     m_loadingIndicator->show();
     m_loadingIndicator->raise();
 }
