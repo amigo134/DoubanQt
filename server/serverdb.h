@@ -30,7 +30,7 @@ public:
     QList<int> getPendingFromIds(int userId);
     int getFriendshipStatus(int userId, int friendId);
 
-    bool saveMessage(int fromId, int toId, const QString& content, const QString& time);
+    bool saveMessage(int fromId, int toId, const QString& content, const QString& time, int* outMsgId = nullptr);
     QList<ServerMsg> getOfflineMessages(int userId);
     QList<ServerMsg> getChatHistory(int userId, int friendId, int limit, int beforeMsgId);
     void markDelivered(int userId);

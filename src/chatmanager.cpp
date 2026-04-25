@@ -122,6 +122,9 @@ void ChatManager::onTextMessageReceived(const QString& message)
     QString type = obj["type"].toString();
 
     if (type == "login_result") {
+        if (obj["success"].toBool()) {
+            m_username = obj["username"].toString();
+        }
         emit loginResult(obj["success"].toBool());
         if (obj["success"].toBool()) {
             requestFriendList();
@@ -146,14 +149,21 @@ void ChatManager::onTextMessageReceived(const QString& message)
     } else if (type == "recv_msg") {
         emit messageReceived(obj["from"].toString(),
                              obj["content"].toString(),
-                             obj["time"].toString());
+                             obj["time"].toString(),
+                             obj["id"].toInt());
+    } else if (type == "send_msg_result") {
+        emit messageSent(obj["to"].toString(),
+                         obj["content"].toString(),
+                         obj["time"].toString(),
+                         obj["id"].toInt());
     } else if (type == "offline_msg") {
         QJsonArray arr = obj["messages"].toArray();
         for (const QJsonValue& v : arr) {
             QJsonObject mo = v.toObject();
             emit messageReceived(mo["from"].toString(),
                                  mo["content"].toString(),
-                                 mo["time"].toString());
+                                 mo["time"].toString(),
+                                 mo["id"].toInt());
         }
     } else if (type == "online_status") {
         emit onlineStatusChanged(obj["username"].toString(),

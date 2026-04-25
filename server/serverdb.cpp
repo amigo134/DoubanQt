@@ -211,7 +211,7 @@ int ServerDb::getFriendshipStatus(int userId, int friendId)
     return 0;
 }
 
-bool ServerDb::saveMessage(int fromId, int toId, const QString& content, const QString& time)
+bool ServerDb::saveMessage(int fromId, int toId, const QString& content, const QString& time, int* outMsgId)
 {
     QSqlQuery q(m_db);
     q.prepare("INSERT INTO messages (from_id, to_id, content, time, delivered) VALUES (:a, :b, :c, :t, 0)");
@@ -219,7 +219,11 @@ bool ServerDb::saveMessage(int fromId, int toId, const QString& content, const Q
     q.bindValue(":b", toId);
     q.bindValue(":c", content);
     q.bindValue(":t", time);
-    return q.exec();
+    bool ok = q.exec();
+    if (ok && outMsgId) {
+        *outMsgId = q.lastInsertId().toInt();
+    }
+    return ok;
 }
 
 QList<ServerMsg> ServerDb::getOfflineMessages(int userId)

@@ -11,6 +11,7 @@
 #include "chatmodel.h"
 #include "chatmessagedelegate.h"
 #include "chatmanager.h"
+#include "loadingwidget.h"
 
 class FriendsWidget : public QWidget {
     Q_OBJECT
@@ -22,6 +23,9 @@ public:
 signals:
     void connectionStatusChanged(bool connected);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private slots:
     void onFriendItemClicked(QListWidgetItem* item);
     void onSendClicked();
@@ -32,7 +36,8 @@ private slots:
     void onFriendRequestReceived(const QString& from);
     void onAddFriendResult(bool success, const QString& message);
     void onFriendAccepted(const QString& username);
-    void onMessageReceived(const QString& from, const QString& content, const QString& time);
+    void onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0);
+    void onMessageSent(const QString& to, const QString& content, const QString& time, int msgId);
     void onOnlineStatusChanged(const QString& username, bool online);
     void onChatDisconnected();
     void onChatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
@@ -64,7 +69,7 @@ private:
     QLineEdit* m_msgInput;
     QPushButton* m_sendBtn;
     QWidget* m_placeholder;
-    QLabel* m_loadingIndicator;
+    LoadingWidget* m_loadingIndicator;
 
     QString m_currentChatUser;
     QList<FriendInfo> m_friends;
@@ -72,6 +77,7 @@ private:
 
     bool m_isLoadingHistory = false;
     bool m_hasMoreHistory = true;
+    bool m_isInitialLoad = false;
     QMap<QString, bool> m_hasMoreHistoryMap;
     QMap<QString, ChatMessageModel*> m_chatModels;
 };

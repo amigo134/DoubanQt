@@ -4,6 +4,7 @@
 #include <QScrollBar>
 #include <QDateTime>
 #include <QFrame>
+#include <QResizeEvent>
 
 FriendsWidget::FriendsWidget(ChatManager* chatMgr, QWidget* parent)
     : QWidget(parent)
@@ -26,12 +27,27 @@ FriendsWidget::FriendsWidget(ChatManager* chatMgr, QWidget* parent)
             this, &FriendsWidget::onFriendAccepted);
     connect(m_chatMgr, &ChatManager::messageReceived,
             this, &FriendsWidget::onMessageReceived);
+    connect(m_chatMgr, &ChatManager::messageSent,
+            this, &FriendsWidget::onMessageSent);
     connect(m_chatMgr, &ChatManager::onlineStatusChanged,
             this, &FriendsWidget::onOnlineStatusChanged);
     connect(m_chatMgr, &ChatManager::disconnected,
             this, &FriendsWidget::onChatDisconnected);
     connect(m_chatMgr, &ChatManager::chatHistoryReceived,
             this, &FriendsWidget::onChatHistoryReceived);
+}
+
+bool FriendsWidget::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_chatListView->viewport() && event->type() == QEvent::Resize) {
+        if (m_loadingIndicator && m_loadingIndicator->isVisible()) {
+            int w = m_chatListView->viewport()->width();
+            m_loadingIndicator->move(0, 0);
+            m_loadingIndicator->setWidth(w);
+            m_loadingIndicator->setFixedWidth(w);
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void FriendsWidget::buildUI()
@@ -120,6 +136,8 @@ void FriendsWidget::buildUI()
     m_chatDelegate = new ChatMessageDelegate(m_chatListView);
     m_chatListView->setItemDelegate(m_chatDelegate);
 
+    m_chatListView->viewport()->installEventFilter(this);
+
     connect(m_chatListView->verticalScrollBar(), &QScrollBar::valueChanged,
             this, &FriendsWidget::onChatScrollBarValueChanged);
 
@@ -188,22 +206,7 @@ void FriendsWidget::onSendClicked()
     if (content.isEmpty()) return;
 
     m_chatMgr->sendMessage(m_currentChatUser, content);
-    QString time = QDateTime::currentDateTime().toString(Qt::ISODate);
-    QString myName = m_chatMgr->currentUsername();
-
-    ChatMsg msg;
-    msg.from = myName;
-    msg.to = m_currentChatUser;
-    msg.content = content;
-    msg.time = time;
-    msg.isOwn = true;
-
-    if (m_chatModel) {
-        m_chatModel->appendMessage(msg);
-    }
-
     m_msgInput->clear();
-    scrollToBottom();
 }
 
 void FriendsWidget::onAddFriendClicked()
@@ -281,9 +284,10 @@ void FriendsWidget::onFriendAccepted(const QString& username)
     m_chatMgr->requestFriendList();
 }
 
-void FriendsWidget::onMessageReceived(const QString& from, const QString& content, const QString& time)
+void FriendsWidget::onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId)
 {
     ChatMsg msg;
+    msg.id = msgId;
     msg.from = from;
     msg.content = content;
     msg.time = time;
@@ -297,6 +301,27 @@ void FriendsWidget::onMessageReceived(const QString& from, const QString& conten
             m_chatModels[from] = new ChatMessageModel(this);
         }
         m_chatModels[from]->appendMessage(msg);
+    }
+}
+
+void FriendsWidget::onMessageSent(const QString& to, const QString& content, const QString& time, int msgId)
+{
+    ChatMsg msg;
+    msg.id = msgId;
+    msg.from = m_chatMgr->currentUsername();
+    msg.to = to;
+    msg.content = content;
+    msg.time = time;
+    msg.isOwn = true;
+
+    if (to == m_currentChatUser && m_chatModel) {
+        m_chatModel->appendMessage(msg);
+        scrollToBottom();
+    } else {
+        if (!m_chatModels.contains(to)) {
+            m_chatModels[to] = new ChatMessageModel(this);
+        }
+        m_chatModels[to]->appendMessage(msg);
     }
 }
 
@@ -341,32 +366,64 @@ void FriendsWidget::onChatHistoryReceived(const QString& with, const QList<ChatM
 
     if (messages.isEmpty()) {
         m_isLoadingHistory = false;
+        m_isInitialLoad = false;
         return;
     }
 
-    QScrollBar* bar = m_chatListView->verticalScrollBar();
-    int distFromBottom = bar->maximum() - bar->value();
+    if (m_isInitialLoad) {
+        m_chatListView->setUpdatesEnabled(false);
 
-    QWidget* anchorWidget = m_chatListView->viewport()->childAt(
-        m_chatListView->viewport()->rect().topLeft() + QPoint(0, bar->value()));
-    int anchorY = anchorWidget ? anchorWidget->y() : -1;
+        for (const auto& msg : messages) {
+            m_chatModel->appendMessage(msg);
+        }
 
-    m_chatListView->setUpdatesEnabled(false);
+        m_chatListView->doItemsLayout();
 
-    m_chatModel->prependMessages(messages);
+        m_chatListView->setUpdatesEnabled(true);
 
-    m_chatListView->doItemsLayout();
+        m_isInitialLoad = false;
+        m_isLoadingHistory = false;
 
-    if (anchorWidget && anchorY >= 0) {
-        int newAnchorY = anchorWidget->y();
-        bar->setValue(bar->value() + (newAnchorY - anchorY));
+        QMetaObject::invokeMethod(this, [this]() {
+            QScrollBar* bar = m_chatListView->verticalScrollBar();
+            bar->setValue(bar->maximum());
+        }, Qt::QueuedConnection);
     } else {
-        bar->setValue(bar->maximum() - distFromBottom);
+        int oldRowCount = m_chatModel->rowCount();
+
+        QModelIndex anchorIndex;
+        for (int i = 0; i < oldRowCount; ++i) {
+            QModelIndex idx = m_chatModel->index(i, 0);
+            if (idx.data(ChatMessageModel::ItemTypeRole).toInt() == static_cast<int>(ChatItemType::Message)) {
+                anchorIndex = idx;
+                break;
+            }
+        }
+
+        int anchorRow = anchorIndex.isValid() ? anchorIndex.row() : -1;
+
+        m_chatListView->setUpdatesEnabled(false);
+
+        m_chatModel->prependMessages(messages);
+
+        m_chatListView->doItemsLayout();
+
+        if (anchorRow >= 0) {
+            int addedCount = m_chatModel->rowCount() - oldRowCount;
+            int newAnchorRow = anchorRow + addedCount;
+            QModelIndex newAnchorIndex = m_chatModel->index(newAnchorRow, 0);
+            if (newAnchorIndex.isValid()) {
+                m_chatListView->scrollTo(newAnchorIndex, QAbstractItemView::PositionAtTop);
+            }
+        } else {
+            QScrollBar* bar = m_chatListView->verticalScrollBar();
+            bar->setValue(bar->maximum());
+        }
+
+        m_chatListView->setUpdatesEnabled(true);
+
+        m_isLoadingHistory = false;
     }
-
-    m_chatListView->setUpdatesEnabled(true);
-
-    m_isLoadingHistory = false;
 }
 
 void FriendsWidget::onChatScrollBarValueChanged(int value)
@@ -375,6 +432,7 @@ void FriendsWidget::onChatScrollBarValueChanged(int value)
     if (m_currentChatUser.isEmpty()) return;
     if (m_isLoadingHistory) return;
     if (!m_hasMoreHistory) return;
+    if (m_chatModel->isEmpty()) return;
 
     requestHistory();
 }
@@ -421,15 +479,18 @@ void FriendsWidget::openChatWith(const QString& username)
     m_hasMoreHistory = m_hasMoreHistoryMap.value(username, true);
 
     if (m_chatModel->isEmpty()) {
-        m_chatMgr->requestChatHistory(username, 30, 0);
+        m_isInitialLoad = true;
         m_isLoadingHistory = true;
+        m_chatMgr->requestChatHistory(username, 30, 0);
+    } else {
+        m_isInitialLoad = false;
+        QMetaObject::invokeMethod(this, [this]() {
+            QScrollBar* bar = m_chatListView->verticalScrollBar();
+            bar->setValue(bar->maximum());
+        }, Qt::QueuedConnection);
     }
 
     m_msgInput->setFocus();
-
-    QMetaObject::invokeMethod(this, [this]() {
-        scrollToBottom();
-    }, Qt::QueuedConnection);
 }
 
 void FriendsWidget::scrollToBottom()
@@ -455,11 +516,11 @@ void FriendsWidget::showTopLoadingIndicator()
 {
     if (m_loadingIndicator) return;
 
-    m_loadingIndicator = new QLabel("⏳ 加载中...");
-    m_loadingIndicator->setAlignment(Qt::AlignCenter);
-    m_loadingIndicator->setStyleSheet("color: #999; font-size: 12px; padding: 8px; background: #F5F6F8;");
-
-    m_chatListView->viewport()->installEventFilter(this);
+    m_loadingIndicator = new LoadingWidget(m_chatListView->viewport());
+    m_loadingIndicator->setWidth(m_chatListView->viewport()->width());
+    m_loadingIndicator->setGeometry(0, 0, m_chatListView->viewport()->width(), 36);
+    m_loadingIndicator->show();
+    m_loadingIndicator->raise();
 }
 
 void FriendsWidget::removeTopLoadingIndicator()

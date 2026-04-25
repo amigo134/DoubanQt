@@ -28,7 +28,8 @@ signals:
     void addFriendResult(bool success, const QString& message);
     void friendAccepted(const QString& username);
     void friendListReceived(const QList<FriendInfo>& friends);
-    void messageReceived(const QString& from, const QString& content, const QString& time);
+    void messageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0);
+    void messageSent(const QString& to, const QString& content, const QString& time, int msgId);
     void chatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
     void onlineStatusChanged(const QString& username, bool online);
     void disconnected();

@@ -57,6 +57,7 @@ set(HEADERS
     src/chatbubble.h
     src/chatmessagewidget.h
     src/chatmessagedelegate.h
+    src/loadingwidget.h
 )
 
 set(RESOURCES

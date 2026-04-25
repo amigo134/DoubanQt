@@ -76,29 +76,7 @@ void ChatMessageDelegate::paintMessage(QPainter* painter,
                         : rect.left() + ITEM_H_MARGIN;
     int avatarY = rect.top() + ITEM_V_MARGIN + NAME_LABEL_HEIGHT;
 
-    drawAvatar(painter, QRect(avatarX, avatarY, AVATAR_SIZE, AVATAR_SIZE), from, isOwn);
-
-    int contentX = isOwn
-        ? avatarX - AVATAR_MSG_GAP - BUBBLE_MAX_WIDTH
-        : avatarX + AVATAR_SIZE + AVATAR_MSG_GAP;
     int contentW = rect.width() - 2 * ITEM_H_MARGIN - AVATAR_SIZE - AVATAR_MSG_GAP;
-
-    QFont nameFont;
-    nameFont.setPixelSize(11);
-    painter->setFont(nameFont);
-    painter->setPen(QColor("#999999"));
-
-    if (isOwn) {
-        QFontMetrics nameFm(nameFont);
-        int nameW = nameFm.horizontalAdvance(from);
-        painter->drawText(QRect(contentX + contentW - nameW - ARROW_WIDTH - BUBBLE_PADDING,
-                                rect.top() + ITEM_V_MARGIN, nameW, NAME_LABEL_HEIGHT),
-                          Qt::AlignLeft, from);
-    } else {
-        painter->drawText(QRect(contentX + ARROW_WIDTH + BUBBLE_PADDING,
-                                rect.top() + ITEM_V_MARGIN, contentW, NAME_LABEL_HEIGHT),
-                          Qt::AlignLeft, from);
-    }
 
     QFont bubbleFont;
     bubbleFont.setPixelSize(14);
@@ -112,6 +90,21 @@ void ChatMessageDelegate::paintMessage(QPainter* painter,
     } else {
         bubbleRect.moveLeft(avatarX + AVATAR_SIZE + AVATAR_MSG_GAP);
     }
+
+    QFont nameFont;
+    nameFont.setPixelSize(11);
+    painter->setFont(nameFont);
+    painter->setPen(QColor("#999999"));
+
+    if (isOwn) {
+        painter->drawText(QRect(bubbleRect.x(), rect.top() + ITEM_V_MARGIN, bubbleRect.width() - ARROW_WIDTH, NAME_LABEL_HEIGHT),
+                          Qt::AlignRight, from);
+    } else {
+        painter->drawText(QRect(bubbleRect.x() + ARROW_WIDTH, rect.top() + ITEM_V_MARGIN, bubbleRect.width() - ARROW_WIDTH, NAME_LABEL_HEIGHT),
+                          Qt::AlignLeft, from);
+    }
+
+    drawAvatar(painter, QRect(avatarX, avatarY, AVATAR_SIZE, AVATAR_SIZE), from, isOwn);
 
     drawBubble(painter, bubbleRect, isOwn);
 

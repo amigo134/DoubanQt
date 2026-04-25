@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
+#include <QTimer>
 #include <QDebug>
 
 ChatServer::ChatServer(quint16 port, QObject* parent)
@@ -108,6 +109,7 @@ void ChatServer::handleLogin(QWebSocket* socket, const QJsonObject& obj)
         QJsonArray arr;
         for (const auto& m : offlineMsgs) {
             QJsonObject mo;
+            mo["id"] = m.id;
             mo["from"] = m_db->getUsername(m.fromId);
             mo["content"] = m.content;
             mo["time"] = m.time;
@@ -245,10 +247,20 @@ void ChatServer::handleSendMessage(QWebSocket* socket, const QJsonObject& obj)
         return;
     }
 
-    m_db->saveMessage(fromId, toId, content, time);
+    int msgId = 0;
+    bool ok = m_db->saveMessage(fromId, toId, content, time, &msgId);
+
+    QJsonObject msgToSender;
+    msgToSender["type"] = "send_msg_result";
+    msgToSender["id"] = msgId;
+    msgToSender["to"] = toName;
+    msgToSender["content"] = content;
+    msgToSender["time"] = time;
+    sendToSocket(socket, msgToSender);
 
     QJsonObject msgToRecipient;
     msgToRecipient["type"] = "recv_msg";
+    msgToRecipient["id"] = msgId;
     msgToRecipient["from"] = m_db->getUsername(fromId);
     msgToRecipient["content"] = content;
     msgToRecipient["time"] = time;
@@ -353,5 +365,8 @@ void ChatServer::handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj
     resp["with"] = friendName;
     resp["messages"] = arr;
     resp["has_more"] = hasMore;
-    sendToSocket(socket, resp);
+
+    QTimer::singleShot(800, this, [this, socket, resp]() {
+        sendToSocket(socket, resp);
+    });
 }
