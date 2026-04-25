@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 #include <QListWidget>
-#include <QScrollArea>
+#include <QListView>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QMap>
 #include "chatmodel.h"
+#include "chatmessagedelegate.h"
 #include "chatmanager.h"
 
 class FriendsWidget : public QWidget {
@@ -34,15 +35,19 @@ private slots:
     void onMessageReceived(const QString& from, const QString& content, const QString& time);
     void onOnlineStatusChanged(const QString& username, bool online);
     void onChatDisconnected();
+    void onChatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
+    void onChatScrollBarValueChanged(int value);
 
 private:
     void buildUI();
     void updateFriendListUI();
     void openChatWith(const QString& username);
-    void appendChatMessage(const QString& from, const QString& content, const QString& time, bool isOwn);
     void showPlaceholder();
     void updateRequestBadge();
     void scrollToBottom();
+    void requestHistory();
+    void showTopLoadingIndicator();
+    void removeTopLoadingIndicator();
 
     ChatManager* m_chatMgr;
 
@@ -53,15 +58,20 @@ private:
 
     QWidget* m_chatArea;
     QLabel* m_chatTitle;
-    QScrollArea* m_chatScroll;
-    QWidget* m_chatContainer;
-    QVBoxLayout* m_chatLayout;
+    QListView* m_chatListView;
+    ChatMessageModel* m_chatModel;
+    ChatMessageDelegate* m_chatDelegate;
     QLineEdit* m_msgInput;
     QPushButton* m_sendBtn;
     QWidget* m_placeholder;
+    QLabel* m_loadingIndicator;
 
     QString m_currentChatUser;
     QList<FriendInfo> m_friends;
     QStringList m_pendingRequests;
-    QMap<QString, QList<ChatMsg>> m_chatMessages;
+
+    bool m_isLoadingHistory = false;
+    bool m_hasMoreHistory = true;
+    QMap<QString, bool> m_hasMoreHistoryMap;
+    QMap<QString, ChatMessageModel*> m_chatModels;
 };

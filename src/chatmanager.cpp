@@ -97,6 +97,16 @@ void ChatManager::requestFriendList()
     sendJson(obj);
 }
 
+void ChatManager::requestChatHistory(const QString& with, int limit, int beforeMsgId)
+{
+    QJsonObject obj;
+    obj["type"] = "get_chat_history";
+    obj["with"] = with;
+    obj["limit"] = limit;
+    obj["before_msg_id"] = beforeMsgId;
+    sendJson(obj);
+}
+
 void ChatManager::onConnected()
 {
     qDebug() << "ChatManager: connected to server";
@@ -148,6 +158,23 @@ void ChatManager::onTextMessageReceived(const QString& message)
     } else if (type == "online_status") {
         emit onlineStatusChanged(obj["username"].toString(),
                                  obj["online"].toBool());
+    } else if (type == "chat_history") {
+        QString with = obj["with"].toString();
+        bool hasMore = obj["has_more"].toBool();
+        QList<ChatMsg> messages;
+        QJsonArray arr = obj["messages"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject mo = v.toObject();
+            ChatMsg msg;
+            msg.id = mo["id"].toInt();
+            msg.from = mo["from"].toString();
+            msg.content = mo["content"].toString();
+            msg.time = mo["time"].toString();
+            msg.isOwn = mo["is_own"].toBool();
+            msg.to = msg.isOwn ? with : m_username;
+            messages.append(msg);
+        }
+        emit chatHistoryReceived(with, messages, hasMore);
     }
 }
 

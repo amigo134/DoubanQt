@@ -51,6 +51,7 @@ void ChatServer::onTextMessageReceived(const QString& message)
     else if (type == "reject_friend") handleRejectFriend(socket, obj);
     else if (type == "send_msg") handleSendMessage(socket, obj);
     else if (type == "get_friend_list") handleGetFriendList(socket, obj);
+    else if (type == "get_chat_history") handleGetChatHistory(socket, obj);
 }
 
 void ChatServer::onClientDisconnected()
@@ -307,4 +308,50 @@ void ChatServer::notifyOnlineStatus(int userId, bool online)
             sendToSocket(m_userToSocket[fid], notify);
         }
     }
+}
+
+void ChatServer::handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString friendName = obj["with"].toString();
+    int friendId = m_db->getUserId(friendName);
+    if (friendId == 0) {
+        QJsonObject resp;
+        resp["type"] = "chat_history";
+        resp["with"] = friendName;
+        resp["messages"] = QJsonArray();
+        resp["has_more"] = false;
+        sendToSocket(socket, resp);
+        return;
+    }
+
+    int limit = obj["limit"].toInt(30);
+    int beforeMsgId = obj["before_msg_id"].toInt(0);
+
+    QList<ServerMsg> msgs = m_db->getChatHistory(userId, friendId, limit + 1, beforeMsgId);
+
+    bool hasMore = msgs.size() > limit;
+    if (hasMore) {
+        msgs.removeFirst();
+    }
+
+    QJsonArray arr;
+    for (const auto& m : msgs) {
+        QJsonObject mo;
+        mo["id"] = m.id;
+        mo["from"] = m_db->getUsername(m.fromId);
+        mo["content"] = m.content;
+        mo["time"] = m.time;
+        mo["is_own"] = (m.fromId == userId);
+        arr.append(mo);
+    }
+
+    QJsonObject resp;
+    resp["type"] = "chat_history";
+    resp["with"] = friendName;
+    resp["messages"] = arr;
+    resp["has_more"] = hasMore;
+    sendToSocket(socket, resp);
 }

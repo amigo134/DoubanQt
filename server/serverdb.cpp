@@ -242,6 +242,52 @@ QList<ServerMsg> ServerDb::getOfflineMessages(int userId)
     return msgs;
 }
 
+QList<ServerMsg> ServerDb::getChatHistory(int userId, int friendId, int limit, int beforeMsgId)
+{
+    QList<ServerMsg> msgs;
+    QSqlQuery q(m_db);
+
+    QString sql = R"(
+        SELECT id, from_id, to_id, content, time FROM messages
+        WHERE ((from_id=:me AND to_id=:friend) OR (from_id=:friend2 AND to_id=:me2))
+    )";
+
+    if (beforeMsgId > 0) {
+        sql += " AND id < :beforeId";
+    }
+
+    sql += " ORDER BY id DESC LIMIT :lim";
+
+    q.prepare(sql);
+    q.bindValue(":me", userId);
+    q.bindValue(":friend", friendId);
+    q.bindValue(":me2", userId);
+    q.bindValue(":friend2", friendId);
+    if (beforeMsgId > 0) {
+        q.bindValue(":beforeId", beforeMsgId);
+    }
+    q.bindValue(":lim", limit);
+
+    if (!q.exec()) {
+        qWarning() << "getChatHistory failed:" << q.lastError().text();
+        return msgs;
+    }
+
+    while (q.next()) {
+        ServerMsg m;
+        m.id = q.value(0).toInt();
+        m.fromId = q.value(1).toInt();
+        m.toId = q.value(2).toInt();
+        m.content = q.value(3).toString();
+        m.time = q.value(4).toString();
+        m.delivered = true;
+        msgs.append(m);
+    }
+
+    std::reverse(msgs.begin(), msgs.end());
+    return msgs;
+}
+
 void ServerDb::markDelivered(int userId)
 {
     QSqlQuery q(m_db);

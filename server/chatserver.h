@@ -22,6 +22,7 @@ private:
     void handleRejectFriend(QWebSocket* socket, const QJsonObject& obj);
     void handleSendMessage(QWebSocket* socket, const QJsonObject& obj);
     void handleGetFriendList(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj);
 
     void sendToSocket(QWebSocket* socket, const QJsonObject& obj);
     void sendToUser(int userId, const QJsonObject& obj);

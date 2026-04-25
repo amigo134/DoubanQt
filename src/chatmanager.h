@@ -18,6 +18,7 @@ public:
     void rejectFriend(const QString& username);
     void sendMessage(const QString& to, const QString& content);
     void requestFriendList();
+    void requestChatHistory(const QString& with, int limit = 30, int beforeMsgId = 0);
 
 signals:
     void connected();
@@ -28,6 +29,7 @@ signals:
     void friendAccepted(const QString& username);
     void friendListReceived(const QList<FriendInfo>& friends);
     void messageReceived(const QString& from, const QString& content, const QString& time);
+    void chatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
     void onlineStatusChanged(const QString& username, bool online);
     void disconnected();
 

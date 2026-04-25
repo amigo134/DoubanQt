@@ -31,6 +31,8 @@ set(SOURCES
     src/avatarwidget.cpp
     src/chatbubble.cpp
     src/chatmessagewidget.cpp
+    src/chatmodel.cpp
+    src/chatmessagedelegate.cpp
 )
 
 set(HEADERS
@@ -54,6 +56,7 @@ set(HEADERS
     src/avatarwidget.h
     src/chatbubble.h
     src/chatmessagewidget.h
+    src/chatmessagedelegate.h
 )
 
 set(RESOURCES

@@ -32,6 +32,7 @@ public:
 
     bool saveMessage(int fromId, int toId, const QString& content, const QString& time);
     QList<ServerMsg> getOfflineMessages(int userId);
+    QList<ServerMsg> getChatHistory(int userId, int friendId, int limit, int beforeMsgId);
     void markDelivered(int userId);
 
 private:
