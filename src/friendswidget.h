@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMap>
+#include <QSet>
 #include "chatmodel.h"
 #include "chatmessagedelegate.h"
 #include "chatmanager.h"
@@ -80,4 +81,5 @@ private:
     bool m_isInitialLoad = false;
     QMap<QString, bool> m_hasMoreHistoryMap;
     QMap<QString, ChatMessageModel*> m_chatModels;
+    QSet<QString> m_historyLoadedUsers;
 };
