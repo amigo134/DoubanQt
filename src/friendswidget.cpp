@@ -373,9 +373,13 @@ void FriendsWidget::onChatHistoryReceived(const QString& with, const QList<ChatM
     if (m_isInitialLoad) {
         m_chatListView->setUpdatesEnabled(false);
 
+        m_chatModel->clear();
+
         for (const auto& msg : messages) {
             m_chatModel->appendMessage(msg);
         }
+
+        m_historyLoadedUsers.insert(with);
 
         m_chatListView->doItemsLayout();
 
@@ -478,7 +482,7 @@ void FriendsWidget::openChatWith(const QString& username)
     m_isLoadingHistory = false;
     m_hasMoreHistory = m_hasMoreHistoryMap.value(username, true);
 
-    if (m_chatModel->isEmpty()) {
+    if (!m_historyLoadedUsers.contains(username)) {
         m_isInitialLoad = true;
         m_isLoadingHistory = true;
         m_chatMgr->requestChatHistory(username, 30, 0);
