@@ -1,8 +1,6 @@
 #include "serverdb.h"
 #include <QSqlQuery>
 #include <QSqlError>
-#include <QCoreApplication>
-#include <QDir>
 #include <QDateTime>
 #include <QDebug>
 
@@ -13,22 +11,38 @@ ServerDb::ServerDb(QObject* parent)
 
 bool ServerDb::initialize()
 {
-    QString dataPath = QCoreApplication::applicationDirPath();
-    QString dbPath = dataPath + "/chatserver.db";
-    qDebug() << "Server DB path:" << dbPath;
+    QString dbName = "chatserver";
 
     if (QSqlDatabase::contains(QSqlDatabase::defaultConnection)) {
         m_db = QSqlDatabase::database(QSqlDatabase::defaultConnection);
     } else {
-        m_db = QSqlDatabase::addDatabase("QSQLITE");
+        m_db = QSqlDatabase::addDatabase("QMYSQL");
     }
-    m_db.setDatabaseName(dbPath);
+
+    m_db.setHostName("localhost");
+    m_db.setPort(3306);
+    m_db.setUserName("root");
+    m_db.setPassword("123456");
+    m_db.setDatabaseName(dbName);
 
     if (!m_db.open()) {
-        qWarning() << "Server DB open failed:" << m_db.lastError().text();
-        return false;
+        qDebug() << "Database does not exist, trying to create...";
+        m_db.setDatabaseName("");
+        if (!m_db.open()) {
+            qWarning() << "Connect to MySQL server failed:" << m_db.lastError().text();
+            return false;
+        }
+        QSqlQuery q(m_db);
+        q.exec(QString("CREATE DATABASE IF NOT EXISTS `%1` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci").arg(dbName));
+        m_db.close();
+        m_db.setDatabaseName(dbName);
+        if (!m_db.open()) {
+            qWarning() << "MySQL DB open failed:" << m_db.lastError().text();
+            return false;
+        }
     }
 
+    qDebug() << "Connected to MySQL database:" << dbName;
     return createTables();
 }
 
@@ -38,20 +52,20 @@ bool ServerDb::createTables()
 
     q.exec(R"(
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            created_at TEXT
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            username VARCHAR(64) UNIQUE NOT NULL,
+            password VARCHAR(128) NOT NULL,
+            created_at DATETIME
         )
     )");
 
     bool ok = q.exec(R"(
         CREATE TABLE IF NOT EXISTS friendships (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_id INTEGER NOT NULL,
-            to_id INTEGER NOT NULL,
-            status TEXT DEFAULT 'pending',
-            created_at TEXT,
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            from_id INT NOT NULL,
+            to_id INT NOT NULL,
+            status VARCHAR(16) DEFAULT 'pending',
+            created_at DATETIME,
             UNIQUE(from_id, to_id)
         )
     )");
@@ -63,12 +77,12 @@ bool ServerDb::createTables()
 
     ok = q.exec(R"(
         CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_id INTEGER NOT NULL,
-            to_id INTEGER NOT NULL,
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            from_id INT NOT NULL,
+            to_id INT NOT NULL,
             content TEXT,
-            time TEXT,
-            delivered INTEGER DEFAULT 0
+            time DATETIME,
+            delivered TINYINT DEFAULT 0
         )
     )");
 
