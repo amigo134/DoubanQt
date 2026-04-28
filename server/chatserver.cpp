@@ -3,13 +3,13 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
-#include <QTimer>
 #include <QDebug>
+#include <memory>
 
 ChatServer::ChatServer(quint16 port, QObject* parent)
     : QObject(parent)
     , m_server(new QWebSocketServer("ChatServer", QWebSocketServer::NonSecureMode, this))
-    , m_db(new ServerDb(this))
+    , m_db(new ServerDb(5, this))
 {
     if (!m_db->initialize()) {
         qWarning() << "Server DB init failed";
@@ -70,69 +70,113 @@ void ChatServer::onClientDisconnected()
     socket->deleteLater();
 }
 
+// --- Handlers ---
+
 void ChatServer::handleLogin(QWebSocket* socket, const QJsonObject& obj)
 {
     QString username = obj["username"].toString();
     QString passwordHash = obj["password"].toString();
 
-    int userId = m_db->loginUser(username, passwordHash);
-    if (userId == 0) {
-        userId = m_db->registerUser(username, passwordHash);
-    }
-    if (userId == 0) {
+    struct LoginData {
+        int userId = 0;
+        QMap<int, QString> offlineSenderNames; // msgId -> senderName
+        QList<ServerMsg> offlineMsgs;
+        QMap<int, QString> pendingNames; // fromId -> username
+        QList<int> pendingFrom;
+        QList<int> friendIds;
+        QString myName;
+    };
+    auto data = std::make_shared<LoginData>();
+
+    runDbAsync([this, username, passwordHash, data]() {
+        data->userId = m_db->loginUser(username, passwordHash);
+        if (data->userId == 0)
+            data->userId = m_db->registerUser(username, passwordHash);
+        if (data->userId == 0)
+            return;
+
+        data->offlineMsgs = m_db->getOfflineMessages(data->userId);
+        for (const auto& m : data->offlineMsgs)
+            data->offlineSenderNames[m.id] = m_db->getUsername(m.fromId);
+
+        if (!data->offlineMsgs.isEmpty())
+            m_db->markDelivered(data->userId);
+
+        data->pendingFrom = m_db->getPendingFromIds(data->userId);
+        for (int fromId : data->pendingFrom)
+            data->pendingNames[fromId] = m_db->getUsername(fromId);
+
+        data->friendIds = m_db->getFriendIds(data->userId);
+        data->myName = m_db->getUsername(data->userId);
+    }, [this, socket, username, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
+
+        if (data->userId == 0) {
+            QJsonObject resp;
+            resp["type"] = "login_result";
+            resp["success"] = false;
+            resp["message"] = "login failed";
+            sendToSocket(socket, resp);
+            return;
+        }
+
+        // Replace any existing connection for this user
+        if (m_userToSocket.contains(data->userId)) {
+            QWebSocket* old = m_userToSocket[data->userId];
+            m_socketToUser.remove(old);
+            old->close();
+        }
+
+        m_socketToUser[socket] = data->userId;
+        m_userToSocket[data->userId] = socket;
+
         QJsonObject resp;
         resp["type"] = "login_result";
-        resp["success"] = false;
-        resp["message"] = "login failed";
+        resp["success"] = true;
+        resp["user_id"] = data->userId;
+        resp["username"] = username;
         sendToSocket(socket, resp);
-        return;
-    }
 
-    if (m_userToSocket.contains(userId)) {
-        QWebSocket* old = m_userToSocket[userId];
-        m_socketToUser.remove(old);
-        old->close();
-    }
-
-    m_socketToUser[socket] = userId;
-    m_userToSocket[userId] = socket;
-
-    QJsonObject resp;
-    resp["type"] = "login_result";
-    resp["success"] = true;
-    resp["user_id"] = userId;
-    resp["username"] = username;
-    sendToSocket(socket, resp);
-
-    QList<ServerMsg> offlineMsgs = m_db->getOfflineMessages(userId);
-    if (!offlineMsgs.isEmpty()) {
-        QJsonArray arr;
-        for (const auto& m : offlineMsgs) {
-            QJsonObject mo;
-            mo["id"] = m.id;
-            mo["from"] = m_db->getUsername(m.fromId);
-            mo["content"] = m.content;
-            mo["time"] = m.time;
-            arr.append(mo);
+        // Offline messages
+        if (!data->offlineMsgs.isEmpty()) {
+            QJsonArray arr;
+            for (const auto& m : data->offlineMsgs) {
+                QJsonObject mo;
+                mo["id"] = m.id;
+                mo["from"] = data->offlineSenderNames.value(m.id);
+                mo["content"] = m.content;
+                mo["time"] = m.time;
+                arr.append(mo);
+            }
+            QJsonObject offMsg;
+            offMsg["type"] = "offline_msg";
+            offMsg["messages"] = arr;
+            sendToSocket(socket, offMsg);
         }
-        QJsonObject offMsg;
-        offMsg["type"] = "offline_msg";
-        offMsg["messages"] = arr;
-        sendToSocket(socket, offMsg);
-        m_db->markDelivered(userId);
-    }
 
-    notifyOnlineStatus(userId, true);
+        // Notify online status to friends
+        {
+            QJsonObject notify;
+            notify["type"] = "online_status";
+            notify["username"] = data->myName;
+            notify["online"] = true;
+            for (int fid : data->friendIds) {
+                if (m_userToSocket.contains(fid))
+                    sendToSocket(m_userToSocket[fid], notify);
+            }
+        }
 
-    QList<int> pendingFrom = m_db->getPendingFromIds(userId);
-    for (int fromId : pendingFrom) {
-        QJsonObject req;
-        req["type"] = "friend_request";
-        req["from"] = m_db->getUsername(fromId);
-        sendToSocket(socket, req);
-    }
+        // Pending friend requests
+        for (int fromId : data->pendingFrom) {
+            QJsonObject req;
+            req["type"] = "friend_request";
+            req["from"] = data->pendingNames.value(fromId);
+            sendToSocket(socket, req);
+        }
 
-    qDebug() << "User logged in:" << username << "id:" << userId;
+        qDebug() << "User logged in:" << username << "id:" << data->userId;
+    });
 }
 
 void ChatServer::handleAddFriend(QWebSocket* socket, const QJsonObject& obj)
@@ -141,56 +185,74 @@ void ChatServer::handleAddFriend(QWebSocket* socket, const QJsonObject& obj)
     if (fromId == 0) return;
 
     QString targetName = obj["username"].toString();
-    int toId = m_db->getUserId(targetName);
 
-    if (toId == 0) {
+    struct Data {
+        int toId = 0;
+        int status = 0;
+        bool requestOk = false;
+        QString fromName;
+    };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, fromId, targetName, data]() {
+        data->toId = m_db->getUserId(targetName);
+        if (data->toId == 0) return;
+
+        data->status = m_db->getFriendshipStatus(fromId, data->toId);
+        if (data->status == 0) {
+            data->requestOk = m_db->addFriendRequest(fromId, data->toId);
+            data->fromName = m_db->getUsername(fromId);
+        }
+    }, [this, socket, fromId, targetName, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
+
+        if (data->toId == 0) {
+            QJsonObject resp;
+            resp["type"] = "add_friend_result";
+            resp["success"] = false;
+            resp["message"] = "user not found";
+            sendToSocket(socket, resp);
+            return;
+        }
+        if (data->status == 2) {
+            QJsonObject resp;
+            resp["type"] = "add_friend_result";
+            resp["success"] = false;
+            resp["message"] = "already friends";
+            sendToSocket(socket, resp);
+            return;
+        }
+        if (data->status == 1) {
+            QJsonObject resp;
+            resp["type"] = "add_friend_result";
+            resp["success"] = false;
+            resp["message"] = "request pending";
+            sendToSocket(socket, resp);
+            return;
+        }
+        if (!data->requestOk) {
+            QJsonObject resp;
+            resp["type"] = "add_friend_result";
+            resp["success"] = false;
+            resp["message"] = "request failed";
+            sendToSocket(socket, resp);
+            return;
+        }
+
         QJsonObject resp;
         resp["type"] = "add_friend_result";
-        resp["success"] = false;
-        resp["message"] = "user not found";
+        resp["success"] = true;
+        resp["message"] = "request sent";
         sendToSocket(socket, resp);
-        return;
-    }
 
-    int status = m_db->getFriendshipStatus(fromId, toId);
-    if (status == 2) {
-        QJsonObject resp;
-        resp["type"] = "add_friend_result";
-        resp["success"] = false;
-        resp["message"] = "already friends";
-        sendToSocket(socket, resp);
-        return;
-    }
-    if (status == 1) {
-        QJsonObject resp;
-        resp["type"] = "add_friend_result";
-        resp["success"] = false;
-        resp["message"] = "request pending";
-        sendToSocket(socket, resp);
-        return;
-    }
-
-    if (!m_db->addFriendRequest(fromId, toId)) {
-        QJsonObject resp;
-        resp["type"] = "add_friend_result";
-        resp["success"] = false;
-        resp["message"] = "request failed";
-        sendToSocket(socket, resp);
-        return;
-    }
-
-    QJsonObject resp;
-    resp["type"] = "add_friend_result";
-    resp["success"] = true;
-    resp["message"] = "request sent";
-    sendToSocket(socket, resp);
-
-    if (m_userToSocket.contains(toId)) {
-        QJsonObject req;
-        req["type"] = "friend_request";
-        req["from"] = m_db->getUsername(fromId);
-        sendToSocket(m_userToSocket[toId], req);
-    }
+        if (m_userToSocket.contains(data->toId)) {
+            QJsonObject req;
+            req["type"] = "friend_request";
+            req["from"] = data->fromName;
+            sendToSocket(m_userToSocket[data->toId], req);
+        }
+    });
 }
 
 void ChatServer::handleAcceptFriend(QWebSocket* socket, const QJsonObject& obj)
@@ -199,22 +261,37 @@ void ChatServer::handleAcceptFriend(QWebSocket* socket, const QJsonObject& obj)
     if (toId == 0) return;
 
     QString fromName = obj["username"].toString();
-    int fromId = m_db->getUserId(fromName);
-    if (fromId == 0) return;
 
-    if (m_db->acceptFriend(fromId, toId)) {
+    struct Data {
+        int fromId = 0;
+        bool ok = false;
+        QString toName;
+    };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, toId, fromName, data]() {
+        data->fromId = m_db->getUserId(fromName);
+        if (data->fromId == 0) return;
+        data->ok = m_db->acceptFriend(data->fromId, toId);
+        if (data->ok)
+            data->toName = m_db->getUsername(toId);
+    }, [this, socket, fromName, toId, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
+        if (!data->ok) return;
+
         QJsonObject resp;
         resp["type"] = "friend_accepted";
         resp["username"] = fromName;
         sendToSocket(socket, resp);
 
-        if (m_userToSocket.contains(fromId)) {
+        if (m_userToSocket.contains(data->fromId)) {
             QJsonObject notify;
             notify["type"] = "friend_accepted";
-            notify["username"] = m_db->getUsername(toId);
-            sendToSocket(m_userToSocket[fromId], notify);
+            notify["username"] = data->toName;
+            sendToSocket(m_userToSocket[data->fromId], notify);
         }
-    }
+    });
 }
 
 void ChatServer::handleRejectFriend(QWebSocket* socket, const QJsonObject& obj)
@@ -223,10 +300,14 @@ void ChatServer::handleRejectFriend(QWebSocket* socket, const QJsonObject& obj)
     if (toId == 0) return;
 
     QString fromName = obj["username"].toString();
-    int fromId = m_db->getUserId(fromName);
-    if (fromId == 0) return;
 
-    m_db->rejectFriend(fromId, toId);
+    runDbAsync([this, toId, fromName]() {
+        int fromId = m_db->getUserId(fromName);
+        if (fromId == 0) return;
+        m_db->rejectFriend(fromId, toId);
+    }, []() {
+        // no response needed
+    });
 }
 
 void ChatServer::handleSendMessage(QWebSocket* socket, const QJsonObject& obj)
@@ -238,37 +319,57 @@ void ChatServer::handleSendMessage(QWebSocket* socket, const QJsonObject& obj)
     QString content = obj["content"].toString();
     QString time = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-    int toId = m_db->getUserId(toName);
-    if (toId == 0) {
-        QJsonObject resp;
-        resp["type"] = "error";
-        resp["message"] = "user not found";
-        sendToSocket(socket, resp);
-        return;
-    }
+    struct Data {
+        int toId = 0;
+        int msgId = 0;
+        bool ok = false;
+        QString fromName;
+        bool recipientOnline = false;
+    };
+    auto data = std::make_shared<Data>();
 
-    int msgId = 0;
-    bool ok = m_db->saveMessage(fromId, toId, content, time, &msgId);
+    runDbAsync([this, fromId, toName, content, time, data]() {
+        data->toId = m_db->getUserId(toName);
+        if (data->toId == 0) return;
 
-    QJsonObject msgToSender;
-    msgToSender["type"] = "send_msg_result";
-    msgToSender["id"] = msgId;
-    msgToSender["to"] = toName;
-    msgToSender["content"] = content;
-    msgToSender["time"] = time;
-    sendToSocket(socket, msgToSender);
+        data->ok = m_db->saveMessage(fromId, data->toId, content, time, &data->msgId);
+        if (data->ok)
+            data->fromName = m_db->getUsername(fromId);
+    }, [this, socket, fromId, toName, content, time, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
 
-    QJsonObject msgToRecipient;
-    msgToRecipient["type"] = "recv_msg";
-    msgToRecipient["id"] = msgId;
-    msgToRecipient["from"] = m_db->getUsername(fromId);
-    msgToRecipient["content"] = content;
-    msgToRecipient["time"] = time;
+        if (data->toId == 0) {
+            QJsonObject resp;
+            resp["type"] = "error";
+            resp["message"] = "user not found";
+            sendToSocket(socket, resp);
+            return;
+        }
 
-    if (m_userToSocket.contains(toId)) {
-        sendToSocket(m_userToSocket[toId], msgToRecipient);
-        m_db->markDelivered(toId);
-    }
+        QJsonObject msgToSender;
+        msgToSender["type"] = "send_msg_result";
+        msgToSender["id"] = data->msgId;
+        msgToSender["to"] = toName;
+        msgToSender["content"] = content;
+        msgToSender["time"] = time;
+        sendToSocket(socket, msgToSender);
+
+        QJsonObject msgToRecipient;
+        msgToRecipient["type"] = "recv_msg";
+        msgToRecipient["id"] = data->msgId;
+        msgToRecipient["from"] = data->fromName;
+        msgToRecipient["content"] = content;
+        msgToRecipient["time"] = time;
+
+        if (m_userToSocket.contains(data->toId)) {
+            sendToSocket(m_userToSocket[data->toId], msgToRecipient);
+            // Mark delivered on recipient if they're online
+            runDbAsync([this, toId = data->toId]() {
+                m_db->markDelivered(toId);
+            }, []() {});
+        }
+    });
 }
 
 void ChatServer::handleGetFriendList(QWebSocket* socket, const QJsonObject&)
@@ -276,20 +377,89 @@ void ChatServer::handleGetFriendList(QWebSocket* socket, const QJsonObject&)
     int userId = m_socketToUser.value(socket, 0);
     if (userId == 0) return;
 
-    QList<int> friendIds = m_db->getFriendIds(userId);
-    QJsonArray arr;
-    for (int fid : friendIds) {
-        QJsonObject fo;
-        fo["username"] = m_db->getUsername(fid);
-        fo["online"] = m_userToSocket.contains(fid);
-        arr.append(fo);
-    }
+    struct Data {
+        QList<int> friendIds;
+        QMap<int, QString> names;
+    };
+    auto data = std::make_shared<Data>();
 
-    QJsonObject resp;
-    resp["type"] = "friend_list";
-    resp["friends"] = arr;
-    sendToSocket(socket, resp);
+    runDbAsync([this, userId, data]() {
+        data->friendIds = m_db->getFriendIds(userId);
+        for (int fid : data->friendIds)
+            data->names[fid] = m_db->getUsername(fid);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
+
+        QJsonArray arr;
+        for (int fid : data->friendIds) {
+            QJsonObject fo;
+            fo["username"] = data->names.value(fid);
+            fo["online"] = m_userToSocket.contains(fid);
+            arr.append(fo);
+        }
+
+        QJsonObject resp;
+        resp["type"] = "friend_list";
+        resp["friends"] = arr;
+        sendToSocket(socket, resp);
+    });
 }
+
+void ChatServer::handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString friendName = obj["with"].toString();
+    int limit = obj["limit"].toInt(30);
+    int beforeMsgId = obj["before_msg_id"].toInt(0);
+
+    struct Data {
+        int friendId = 0;
+        QList<ServerMsg> msgs;
+        bool hasMore = false;
+        QMap<int, QString> names;
+    };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, friendName, limit, beforeMsgId, data]() {
+        data->friendId = m_db->getUserId(friendName);
+        if (data->friendId == 0) return;
+
+        data->msgs = m_db->getChatHistory(userId, data->friendId, limit + 1, beforeMsgId);
+        data->hasMore = data->msgs.size() > limit;
+        if (data->hasMore)
+            data->msgs.removeFirst();
+
+        for (const auto& m : data->msgs)
+            data->names[m.id] = m_db->getUsername(m.fromId);
+    }, [this, socket, friendName, userId, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return;
+
+        QJsonArray arr;
+        for (const auto& m : data->msgs) {
+            QJsonObject mo;
+            mo["id"] = m.id;
+            mo["from"] = data->names.value(m.id);
+            mo["content"] = m.content;
+            mo["time"] = m.time;
+            mo["is_own"] = (m.fromId == userId);
+            arr.append(mo);
+        }
+
+        QJsonObject resp;
+        resp["type"] = "chat_history";
+        resp["with"] = friendName;
+        resp["messages"] = arr;
+        resp["has_more"] = data->hasMore;
+
+        sendToSocket(socket, resp);
+    });
+}
+
+// --- Helpers (main thread only) ---
 
 void ChatServer::sendToSocket(QWebSocket* socket, const QJsonObject& obj)
 {
@@ -307,66 +477,25 @@ void ChatServer::sendToUser(int userId, const QJsonObject& obj)
 
 void ChatServer::notifyOnlineStatus(int userId, bool online)
 {
-    QList<int> friendIds = m_db->getFriendIds(userId);
-    QString username = m_db->getUsername(userId);
+    struct Data {
+        QList<int> friendIds;
+        QString username;
+    };
+    auto data = std::make_shared<Data>();
 
-    QJsonObject notify;
-    notify["type"] = "online_status";
-    notify["username"] = username;
-    notify["online"] = online;
+    runDbAsync([this, userId, data]() {
+        data->friendIds = m_db->getFriendIds(userId);
+        data->username = m_db->getUsername(userId);
+    }, [this, userId, online, data]() {
+        QJsonObject notify;
+        notify["type"] = "online_status";
+        notify["username"] = data->username;
+        notify["online"] = online;
 
-    for (int fid : friendIds) {
-        if (m_userToSocket.contains(fid)) {
-            sendToSocket(m_userToSocket[fid], notify);
+        for (int fid : data->friendIds) {
+            if (m_userToSocket.contains(fid)) {
+                sendToSocket(m_userToSocket[fid], notify);
+            }
         }
-    }
-}
-
-void ChatServer::handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj)
-{
-    int userId = m_socketToUser.value(socket, 0);
-    if (userId == 0) return;
-
-    QString friendName = obj["with"].toString();
-    int friendId = m_db->getUserId(friendName);
-    if (friendId == 0) {
-        QJsonObject resp;
-        resp["type"] = "chat_history";
-        resp["with"] = friendName;
-        resp["messages"] = QJsonArray();
-        resp["has_more"] = false;
-        sendToSocket(socket, resp);
-        return;
-    }
-
-    int limit = obj["limit"].toInt(30);
-    int beforeMsgId = obj["before_msg_id"].toInt(0);
-
-    QList<ServerMsg> msgs = m_db->getChatHistory(userId, friendId, limit + 1, beforeMsgId);
-
-    bool hasMore = msgs.size() > limit;
-    if (hasMore) {
-        msgs.removeFirst();
-    }
-
-    QJsonArray arr;
-    for (const auto& m : msgs) {
-        QJsonObject mo;
-        mo["id"] = m.id;
-        mo["from"] = m_db->getUsername(m.fromId);
-        mo["content"] = m.content;
-        mo["time"] = m.time;
-        mo["is_own"] = (m.fromId == userId);
-        arr.append(mo);
-    }
-
-    QJsonObject resp;
-    resp["type"] = "chat_history";
-    resp["with"] = friendName;
-    resp["messages"] = arr;
-    resp["has_more"] = hasMore;
-
-    QTimer::singleShot(800, this, [this, socket, resp]() {
-        sendToSocket(socket, resp);
     });
 }
