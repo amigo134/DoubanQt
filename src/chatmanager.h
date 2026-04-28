@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QWebSocket>
 #include "chatmodel.h"
+#include "moviemodel.h"
 
 class ChatManager : public QObject {
     Q_OBJECT
@@ -20,6 +21,18 @@ public:
     void requestFriendList();
     void requestChatHistory(const QString& with, int limit = 30, int beforeMsgId = 0);
 
+    void requestSaveReview(const QString& doubanId, const QString& movieName,
+                           double rating, const QString& content, bool isWished, bool isWatched,
+                           const QString& posterUrl);
+    void requestGetReview(const QString& doubanId);
+    void requestGetAllReviews();
+    void requestDeleteReview(const QString& doubanId);
+    void requestGetWishList();
+    void requestGetWatchedList();
+    void requestGetProfile();
+    void requestSaveProfile(const QString& name, const QString& bio);
+    void requestSaveAvatar(const QString& avatarPath);
+
 signals:
     void connected();
     void connectionFailed(const QString& error);
@@ -33,6 +46,18 @@ signals:
     void chatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
     void onlineStatusChanged(const QString& username, bool online);
     void disconnected();
+
+    // Review signals
+    void reviewSaved(bool success, const QString& doubanId);
+    void reviewReceived(const UserReview& review);
+    void reviewsListReceived(const QList<UserReview>& reviews);
+    void reviewDeleted(bool success, const QString& doubanId);
+    void wishListReceived(const QList<UserReview>& list);
+    void watchedListReceived(const QList<UserReview>& list);
+    // Profile signals
+    void profileReceived(const QString& name, const QString& bio, const QString& avatarPath);
+    void profileSaved(bool success);
+    void avatarSaved(bool success);
 
 private slots:
     void onConnected();

@@ -19,6 +19,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_chatMgr(new ChatManager(this))
 {
     m_db->initialize();
+    m_db->setChatManager(m_chatMgr);
 
     if (!m_db->isReady()) {
         QMessageBox::critical(nullptr, "数据库错误",

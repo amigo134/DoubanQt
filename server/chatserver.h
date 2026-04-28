@@ -24,6 +24,15 @@ private:
     void handleSendMessage(QWebSocket* socket, const QJsonObject& obj);
     void handleGetFriendList(QWebSocket* socket, const QJsonObject& obj);
     void handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj);
+    void handleSaveReview(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetReview(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetAllReviews(QWebSocket* socket, const QJsonObject& obj);
+    void handleDeleteReview(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetWishList(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetWatchedList(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetProfile(QWebSocket* socket, const QJsonObject& obj);
+    void handleSaveProfile(QWebSocket* socket, const QJsonObject& obj);
+    void handleSaveAvatar(QWebSocket* socket, const QJsonObject& obj);
 
     void sendToSocket(QWebSocket* socket, const QJsonObject& obj);
     void sendToUser(int userId, const QJsonObject& obj);

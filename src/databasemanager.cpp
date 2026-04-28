@@ -1,4 +1,5 @@
 #include "databasemanager.h"
+#include "chatmanager.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QStandardPaths>
@@ -7,6 +8,8 @@
 #include <QDateTime>
 #include <QCryptographicHash>
 #include <QCoreApplication>
+#include <QEventLoop>
+#include <QTimer>
 
 DatabaseManager::DatabaseManager(QObject* parent)
     : QObject(parent)
@@ -71,40 +74,6 @@ bool DatabaseManager::createTables()
         )
     )");
 
-    bool ok = query.exec(R"(
-        CREATE TABLE IF NOT EXISTS reviews (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER DEFAULT 1,
-            douban_id TEXT NOT NULL,
-            movie_name TEXT,
-            rating REAL DEFAULT 0,
-            content TEXT,
-            is_wished INTEGER DEFAULT 0,
-            is_watched INTEGER DEFAULT 0,
-            poster_url TEXT,
-            create_time TEXT,
-            update_time TEXT,
-            UNIQUE(user_id, douban_id)
-        )
-    )");
-
-    if (!ok) {
-        qWarning() << "创建表失败:" << query.lastError().text();
-        return false;
-    }
-
-    query.exec("ALTER TABLE reviews ADD COLUMN user_id INTEGER DEFAULT 1");
-    query.exec("ALTER TABLE reviews ADD COLUMN poster_url TEXT");
-
-    query.exec(R"(
-        CREATE TABLE IF NOT EXISTS user_profile (
-            user_id INTEGER PRIMARY KEY,
-            name TEXT DEFAULT '影迷',
-            bio TEXT DEFAULT '记录每一部看过的电影',
-            avatar_path TEXT
-        )
-    )");
-
     return true;
 }
 
@@ -143,7 +112,11 @@ int DatabaseManager::loginUser(const QString& username, const QString& password)
 void DatabaseManager::setCurrentUser(int userId)
 {
     m_currentUserId = userId;
-    ensureProfile();
+}
+
+void DatabaseManager::setChatManager(ChatManager* mgr)
+{
+    m_chatMgr = mgr;
 }
 
 int DatabaseManager::currentUserId() const
@@ -164,275 +137,249 @@ QString DatabaseManager::currentUsername()
 
 void DatabaseManager::ensureProfile()
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery check(m_db);
-    check.prepare("SELECT user_id FROM user_profile WHERE user_id = :id");
-    check.bindValue(":id", m_currentUserId);
-    if (check.exec() && check.next()) return;
-    QString defaultName = currentUsername();
-    if (defaultName.isEmpty()) defaultName = "影迷";
-    QSqlQuery ins(m_db);
-    ins.prepare("INSERT INTO user_profile (user_id, name, bio, avatar_path) VALUES (:id, :name, '记录每一部看过的电影', NULL)");
-    ins.bindValue(":id", m_currentUserId);
-    ins.bindValue(":name", defaultName);
-    if (!ins.exec()) {
-        qWarning() << "ensureProfile insert failed:" << ins.lastError().text();
-    }
+    // Server auto-creates profile on first getProfile(); no local action needed
 }
 
 bool DatabaseManager::saveReview(const UserReview& review)
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare(R"(
-        INSERT INTO reviews (user_id, douban_id, movie_name, rating, content, is_wished, is_watched, poster_url, create_time, update_time)
-        VALUES (:user_id, :douban_id, :movie_name, :rating, :content, :is_wished, :is_watched, :poster_url, :create_time, :update_time)
-        ON CONFLICT(user_id, douban_id) DO UPDATE SET
-            movie_name = :movie_name2,
-            rating = :rating2,
-            content = :content2,
-            is_wished = :is_wished2,
-            is_watched = :is_watched2,
-            poster_url = :poster_url2,
-            update_time = :update_time2
-    )");
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
 
-    QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
-    query.bindValue(":user_id", m_currentUserId);
-    query.bindValue(":douban_id", review.doubanId);
-    query.bindValue(":movie_name", review.movieName);
-    query.bindValue(":rating", review.rating);
-    query.bindValue(":content", review.content);
-    query.bindValue(":is_wished", review.isWished ? 1 : 0);
-    query.bindValue(":is_watched", review.isWatched ? 1 : 0);
-    query.bindValue(":poster_url", review.posterUrl);
-    query.bindValue(":create_time", review.createTime.isEmpty() ? now : review.createTime);
-    query.bindValue(":update_time", now);
-    query.bindValue(":movie_name2", review.movieName);
-    query.bindValue(":rating2", review.rating);
-    query.bindValue(":content2", review.content);
-    query.bindValue(":is_wished2", review.isWished ? 1 : 0);
-    query.bindValue(":is_watched2", review.isWatched ? 1 : 0);
-    query.bindValue(":poster_url2", review.posterUrl);
-    query.bindValue(":update_time2", now);
+    bool result = false;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    if (!query.exec()) {
-        qWarning() << "保存评价失败:" << query.lastError().text();
-        return false;
-    }
-    return true;
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+        [&](bool success, const QString& did) {
+            if (did == review.doubanId) { result = success; loop.quit(); }
+        });
+
+    m_chatMgr->requestSaveReview(review.doubanId, review.movieName, review.rating,
+                                  review.content, review.isWished, review.isWatched, review.posterUrl);
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 UserReview DatabaseManager::getReview(const QString& doubanId)
 {
-    UserReview review;
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND douban_id = :id");
-    query.bindValue(":uid", m_currentUserId);
-    query.bindValue(":id", doubanId);
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
 
-    if (query.exec() && query.next()) {
-        review.id = query.value("id").toInt();
-        review.doubanId = query.value("douban_id").toString();
-        review.movieName = query.value("movie_name").toString();
-        review.rating = query.value("rating").toDouble();
-        review.content = query.value("content").toString();
-        review.isWished = query.value("is_wished").toInt() != 0;
-        review.isWatched = query.value("is_watched").toInt() != 0;
-        review.posterUrl = query.value("poster_url").toString();
-        review.createTime = query.value("create_time").toString();
-    }
-    return review;
+    UserReview result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewReceived,
+        [&](const UserReview& review) {
+            if (review.doubanId == doubanId) { result = review; loop.quit(); }
+        });
+
+    m_chatMgr->requestGetReview(doubanId);
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 QList<UserReview> DatabaseManager::getAllReviews()
 {
-    QList<UserReview> reviews;
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT * FROM reviews WHERE user_id = :uid ORDER BY update_time DESC");
-    query.bindValue(":uid", m_currentUserId);
-    query.exec();
-    while (query.next()) {
-        UserReview review;
-        review.id = query.value("id").toInt();
-        review.doubanId = query.value("douban_id").toString();
-        review.movieName = query.value("movie_name").toString();
-        review.rating = query.value("rating").toDouble();
-        review.content = query.value("content").toString();
-        review.isWished = query.value("is_wished").toInt() != 0;
-        review.isWatched = query.value("is_watched").toInt() != 0;
-        review.posterUrl = query.value("poster_url").toString();
-        review.createTime = query.value("create_time").toString();
-        reviews.append(review);
-    }
-    return reviews;
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QList<UserReview> result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewsListReceived,
+        [&](const QList<UserReview>& list) { result = list; loop.quit(); });
+
+    m_chatMgr->requestGetAllReviews();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 QString DatabaseManager::getProfileName()
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT name FROM user_profile WHERE user_id = :id");
-    query.bindValue(":id", m_currentUserId);
-    if (query.exec() && query.next())
-        return query.value(0).toString();
-    return "影迷";
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return "影迷";
+
+    QString result = "影迷";
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+        [&](const QString& name, const QString&, const QString&) {
+            result = name; loop.quit();
+        });
+
+    m_chatMgr->requestGetProfile();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 QString DatabaseManager::getProfileBio()
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT bio FROM user_profile WHERE user_id = :id");
-    query.bindValue(":id", m_currentUserId);
-    if (query.exec() && query.next())
-        return query.value(0).toString();
-    return "记录每一部看过的电影";
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QString result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+        [&](const QString&, const QString& bio, const QString&) {
+            result = bio; loop.quit();
+        });
+
+    m_chatMgr->requestGetProfile();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 void DatabaseManager::saveProfile(const QString& name, const QString& bio)
 {
-    if (!m_db.isOpen()) m_db.open();
-    ensureProfile();
-    QSqlQuery query(m_db);
-    query.prepare("INSERT OR REPLACE INTO user_profile (user_id, name, bio, avatar_path) VALUES (:id, :name, :bio, (SELECT avatar_path FROM user_profile WHERE user_id = :id2))");
-    query.bindValue(":id", m_currentUserId);
-    query.bindValue(":name", name);
-    query.bindValue(":bio", bio);
-    query.bindValue(":id2", m_currentUserId);
-    query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileSaved,
+        [&](bool) { loop.quit(); });
+
+    m_chatMgr->requestSaveProfile(name, bio);
+    loop.exec();
+    disconnect(conn);
 }
 
 QString DatabaseManager::getAvatarPath()
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT avatar_path FROM user_profile WHERE user_id = :id");
-    query.bindValue(":id", m_currentUserId);
-    if (query.exec() && query.next())
-        return query.value(0).toString();
-    return QString();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QString result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+        [&](const QString&, const QString&, const QString& path) {
+            result = path; loop.quit();
+        });
+
+    m_chatMgr->requestGetProfile();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 void DatabaseManager::saveAvatarPath(const QString& path)
 {
-    if (!m_db.isOpen()) m_db.open();
-    ensureProfile();
-    QSqlQuery query(m_db);
-    query.prepare("UPDATE user_profile SET avatar_path = :path WHERE user_id = :id");
-    query.bindValue(":path", path);
-    query.bindValue(":id", m_currentUserId);
-    query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::avatarSaved,
+        [&](bool) { loop.quit(); });
+
+    m_chatMgr->requestSaveAvatar(path);
+    loop.exec();
+    disconnect(conn);
 }
 
 bool DatabaseManager::deleteReview(const QString& doubanId)
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("DELETE FROM reviews WHERE user_id = :uid AND douban_id = :id");
-    query.bindValue(":uid", m_currentUserId);
-    query.bindValue(":id", doubanId);
-    return query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+
+    bool result = false;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewDeleted,
+        [&](bool success, const QString& did) {
+            if (did == doubanId) { result = success; loop.quit(); }
+        });
+
+    m_chatMgr->requestDeleteReview(doubanId);
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 void DatabaseManager::updatePosterUrl(const QString& doubanId, const QString& posterUrl)
 {
     if (posterUrl.isEmpty()) return;
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("UPDATE reviews SET poster_url = :poster WHERE user_id = :uid AND douban_id = :id AND (poster_url IS NULL OR poster_url = '')");
-    query.bindValue(":poster", posterUrl);
-    query.bindValue(":uid", m_currentUserId);
-    query.bindValue(":id", doubanId);
-    query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+    // Fire-and-forget: get current review, merge, re-save
+    UserReview existing = getReview(doubanId);
+    existing.posterUrl = posterUrl;
+    saveReview(existing);
 }
 
 bool DatabaseManager::setWished(const QString& doubanId, const QString& movieName, bool wished, const QString& posterUrl)
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare(R"(
-        INSERT INTO reviews (user_id, douban_id, movie_name, is_wished, poster_url, create_time, update_time)
-        VALUES (:uid, :id, :name, :wished, :poster, :time, :time2)
-        ON CONFLICT(user_id, douban_id) DO UPDATE SET is_wished = :wished2, poster_url = :poster2, update_time = :time3
-    )");
-    QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
-    query.bindValue(":uid", m_currentUserId);
-    query.bindValue(":id", doubanId);
-    query.bindValue(":name", movieName);
-    query.bindValue(":wished", wished ? 1 : 0);
-    query.bindValue(":poster", posterUrl);
-    query.bindValue(":time", now);
-    query.bindValue(":time2", now);
-    query.bindValue(":wished2", wished ? 1 : 0);
-    query.bindValue(":poster2", posterUrl);
-    query.bindValue(":time3", now);
-    return query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+
+    bool result = false;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+        [&](bool success, const QString& did) {
+            if (did == doubanId) { result = success; loop.quit(); }
+        });
+
+    m_chatMgr->requestSaveReview(doubanId, movieName, 0, QString(), wished, false, posterUrl);
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieName, bool watched, const QString& posterUrl)
 {
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare(R"(
-        INSERT INTO reviews (user_id, douban_id, movie_name, is_watched, poster_url, create_time, update_time)
-        VALUES (:uid, :id, :name, :watched, :poster, :time, :time2)
-        ON CONFLICT(user_id, douban_id) DO UPDATE SET is_watched = :watched2, poster_url = :poster2, update_time = :time3
-    )");
-    QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
-    query.bindValue(":uid", m_currentUserId);
-    query.bindValue(":id", doubanId);
-    query.bindValue(":name", movieName);
-    query.bindValue(":watched", watched ? 1 : 0);
-    query.bindValue(":poster", posterUrl);
-    query.bindValue(":time", now);
-    query.bindValue(":time2", now);
-    query.bindValue(":watched2", watched ? 1 : 0);
-    query.bindValue(":poster2", posterUrl);
-    query.bindValue(":time3", now);
-    return query.exec();
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+
+    bool result = false;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+        [&](bool success, const QString& did) {
+            if (did == doubanId) { result = success; loop.quit(); }
+        });
+
+    m_chatMgr->requestSaveReview(doubanId, movieName, 0, QString(), false, watched, posterUrl);
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 QList<UserReview> DatabaseManager::getWishList()
 {
-    QList<UserReview> reviews;
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND is_wished = 1 ORDER BY update_time DESC");
-    query.bindValue(":uid", m_currentUserId);
-    query.exec();
-    while (query.next()) {
-        UserReview review;
-        review.doubanId = query.value("douban_id").toString();
-        review.movieName = query.value("movie_name").toString();
-        review.rating = query.value("rating").toDouble();
-        review.isWished = true;
-        review.posterUrl = query.value("poster_url").toString();
-        review.createTime = query.value("create_time").toString();
-        reviews.append(review);
-    }
-    return reviews;
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QList<UserReview> result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::wishListReceived,
+        [&](const QList<UserReview>& list) { result = list; loop.quit(); });
+
+    m_chatMgr->requestGetWishList();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }
 
 QList<UserReview> DatabaseManager::getWatchedList()
 {
-    QList<UserReview> reviews;
-    if (!m_db.isOpen()) m_db.open();
-    QSqlQuery query(m_db);
-    query.prepare("SELECT * FROM reviews WHERE user_id = :uid AND is_watched = 1 ORDER BY update_time DESC");
-    query.bindValue(":uid", m_currentUserId);
-    query.exec();
-    while (query.next()) {
-        UserReview review;
-        review.doubanId = query.value("douban_id").toString();
-        review.movieName = query.value("movie_name").toString();
-        review.rating = query.value("rating").toDouble();
-        review.isWatched = true;
-        review.posterUrl = query.value("poster_url").toString();
-        review.createTime = query.value("create_time").toString();
-        reviews.append(review);
-    }
-    return reviews;
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QList<UserReview> result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::watchedListReceived,
+        [&](const QList<UserReview>& list) { result = list; loop.quit(); });
+
+    m_chatMgr->requestGetWatchedList();
+    loop.exec();
+    disconnect(conn);
+    return result;
 }

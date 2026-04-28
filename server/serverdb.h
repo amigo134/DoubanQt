@@ -12,10 +12,34 @@ struct ServerMsg {
     bool delivered;
 };
 
+struct ReviewData {
+    int id = 0;
+    int userId = 0;
+    QString doubanId;
+    QString movieName;
+    double rating = 0;
+    QString content;
+    bool isWished = false;
+    bool isWatched = false;
+    QString posterUrl;
+    QString createTime;
+    QString updateTime;
+};
+
+struct ProfileData {
+    QString name;
+    QString bio;
+    QString avatarPath;
+};
+
+class ConnectionPool;
+
 class ServerDb : public QObject {
     Q_OBJECT
 public:
-    explicit ServerDb(QObject* parent = nullptr);
+    explicit ServerDb(int poolSize = 5, QObject* parent = nullptr);
+    ~ServerDb() override;
+
     bool initialize();
 
     int registerUser(const QString& username, const QString& passwordHash);
@@ -35,7 +59,22 @@ public:
     QList<ServerMsg> getChatHistory(int userId, int friendId, int limit, int beforeMsgId);
     void markDelivered(int userId);
 
+    // Reviews
+    bool saveReview(int userId, const QString& doubanId, const QString& movieName,
+                    double rating, const QString& content, bool isWished, bool isWatched,
+                    const QString& posterUrl);
+    ReviewData getReview(int userId, const QString& doubanId);
+    QList<ReviewData> getAllReviews(int userId);
+    bool deleteReview(int userId, const QString& doubanId);
+    QList<ReviewData> getWishList(int userId);
+    QList<ReviewData> getWatchedList(int userId);
+
+    // Profile
+    ProfileData getProfile(int userId);
+    bool saveProfile(int userId, const QString& name, const QString& bio);
+    bool saveAvatarPath(int userId, const QString& avatarPath);
+
 private:
-    QSqlDatabase m_db;
-    bool createTables();
+    bool createTables(const QSqlDatabase& db);
+    ConnectionPool* m_pool = nullptr;
 };

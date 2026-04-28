@@ -53,6 +53,15 @@ void ChatServer::onTextMessageReceived(const QString& message)
     else if (type == "send_msg") handleSendMessage(socket, obj);
     else if (type == "get_friend_list") handleGetFriendList(socket, obj);
     else if (type == "get_chat_history") handleGetChatHistory(socket, obj);
+    else if (type == "save_review") handleSaveReview(socket, obj);
+    else if (type == "get_review") handleGetReview(socket, obj);
+    else if (type == "get_all_reviews") handleGetAllReviews(socket, obj);
+    else if (type == "delete_review") handleDeleteReview(socket, obj);
+    else if (type == "get_wish_list") handleGetWishList(socket, obj);
+    else if (type == "get_watched_list") handleGetWatchedList(socket, obj);
+    else if (type == "get_profile") handleGetProfile(socket, obj);
+    else if (type == "save_profile") handleSaveProfile(socket, obj);
+    else if (type == "save_avatar") handleSaveAvatar(socket, obj);
 }
 
 void ChatServer::onClientDisconnected()
@@ -497,5 +506,270 @@ void ChatServer::notifyOnlineStatus(int userId, bool online)
                 sendToSocket(m_userToSocket[fid], notify);
             }
         }
+    });
+}
+
+// --- Review / Profile handlers ---
+
+void ChatServer::handleSaveReview(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString doubanId = obj["douban_id"].toString();
+    QString movieName = obj["movie_name"].toString();
+    double rating = obj["rating"].toDouble(0);
+    QString content = obj["content"].toString();
+    bool isWished = obj["is_wished"].toBool(false);
+    bool isWatched = obj["is_watched"].toBool(false);
+    QString posterUrl = obj["poster_url"].toString();
+
+    struct Data { bool ok = false; ReviewData review; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, doubanId, movieName, rating, content, isWished, isWatched, posterUrl, data]() {
+        data->ok = m_db->saveReview(userId, doubanId, movieName, rating, content, isWished, isWatched, posterUrl);
+        if (data->ok)
+            data->review = m_db->getReview(userId, doubanId);
+    }, [this, socket, doubanId, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "review_result";
+        resp["success"] = data->ok;
+        resp["douban_id"] = doubanId;
+        if (data->ok) {
+            QJsonObject r;
+            r["id"] = data->review.id;
+            r["movie_name"] = data->review.movieName;
+            r["rating"] = data->review.rating;
+            r["content"] = data->review.content;
+            r["is_wished"] = data->review.isWished;
+            r["is_watched"] = data->review.isWatched;
+            r["poster_url"] = data->review.posterUrl;
+            r["create_time"] = data->review.createTime;
+            r["update_time"] = data->review.updateTime;
+            resp["review"] = r;
+        }
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleGetReview(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString doubanId = obj["douban_id"].toString();
+
+    struct Data { ReviewData review; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, doubanId, data]() {
+        data->review = m_db->getReview(userId, doubanId);
+    }, [this, socket, doubanId, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "review_result";
+        resp["success"] = data->review.id > 0;
+        resp["douban_id"] = doubanId;
+        if (data->review.id > 0) {
+            QJsonObject r;
+            r["id"] = data->review.id;
+            r["movie_name"] = data->review.movieName;
+            r["rating"] = data->review.rating;
+            r["content"] = data->review.content;
+            r["is_wished"] = data->review.isWished;
+            r["is_watched"] = data->review.isWatched;
+            r["poster_url"] = data->review.posterUrl;
+            r["create_time"] = data->review.createTime;
+            r["update_time"] = data->review.updateTime;
+            resp["review"] = r;
+        }
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleGetAllReviews(QWebSocket* socket, const QJsonObject&)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    struct Data { QList<ReviewData> reviews; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, data]() {
+        data->reviews = m_db->getAllReviews(userId);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonArray arr;
+        for (const auto& rv : data->reviews) {
+            QJsonObject r;
+            r["id"] = rv.id;
+            r["douban_id"] = rv.doubanId;
+            r["movie_name"] = rv.movieName;
+            r["rating"] = rv.rating;
+            r["content"] = rv.content;
+            r["is_wished"] = rv.isWished;
+            r["is_watched"] = rv.isWatched;
+            r["poster_url"] = rv.posterUrl;
+            r["create_time"] = rv.createTime;
+            r["update_time"] = rv.updateTime;
+            arr.append(r);
+        }
+        QJsonObject resp;
+        resp["type"] = "reviews_list";
+        resp["reviews"] = arr;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleDeleteReview(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString doubanId = obj["douban_id"].toString();
+
+    struct Data { bool ok = false; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, doubanId, data]() {
+        data->ok = m_db->deleteReview(userId, doubanId);
+    }, [this, socket, doubanId, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "delete_review_result";
+        resp["success"] = data->ok;
+        resp["douban_id"] = doubanId;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleGetWishList(QWebSocket* socket, const QJsonObject&)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    struct Data { QList<ReviewData> list; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, data]() {
+        data->list = m_db->getWishList(userId);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonArray arr;
+        for (const auto& rv : data->list) {
+            QJsonObject r;
+            r["douban_id"] = rv.doubanId;
+            r["movie_name"] = rv.movieName;
+            r["rating"] = rv.rating;
+            r["poster_url"] = rv.posterUrl;
+            arr.append(r);
+        }
+        QJsonObject resp;
+        resp["type"] = "wish_list";
+        resp["movies"] = arr;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleGetWatchedList(QWebSocket* socket, const QJsonObject&)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    struct Data { QList<ReviewData> list; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, data]() {
+        data->list = m_db->getWatchedList(userId);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonArray arr;
+        for (const auto& rv : data->list) {
+            QJsonObject r;
+            r["douban_id"] = rv.doubanId;
+            r["movie_name"] = rv.movieName;
+            r["rating"] = rv.rating;
+            r["poster_url"] = rv.posterUrl;
+            arr.append(r);
+        }
+        QJsonObject resp;
+        resp["type"] = "watched_list";
+        resp["movies"] = arr;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleGetProfile(QWebSocket* socket, const QJsonObject&)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    struct Data { ProfileData profile; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, data]() {
+        data->profile = m_db->getProfile(userId);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "profile_data";
+        resp["name"] = data->profile.name;
+        resp["bio"] = data->profile.bio;
+        resp["avatar_path"] = data->profile.avatarPath;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleSaveProfile(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString name = obj["name"].toString();
+    QString bio = obj["bio"].toString();
+
+    struct Data { bool ok = false; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, name, bio, data]() {
+        data->ok = m_db->saveProfile(userId, name, bio);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "profile_saved";
+        resp["success"] = data->ok;
+        sendToSocket(socket, resp);
+    });
+}
+
+void ChatServer::handleSaveAvatar(QWebSocket* socket, const QJsonObject& obj)
+{
+    int userId = m_socketToUser.value(socket, 0);
+    if (userId == 0) return;
+
+    QString avatarPath = obj["avatar_path"].toString();
+
+    struct Data { bool ok = false; };
+    auto data = std::make_shared<Data>();
+
+    runDbAsync([this, userId, avatarPath, data]() {
+        data->ok = m_db->saveAvatarPath(userId, avatarPath);
+    }, [this, socket, data]() {
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
+
+        QJsonObject resp;
+        resp["type"] = "avatar_saved";
+        resp["success"] = data->ok;
+        sendToSocket(socket, resp);
     });
 }

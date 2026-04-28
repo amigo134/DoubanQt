@@ -3,6 +3,8 @@
 #include <QSqlDatabase>
 #include "moviemodel.h"
 
+class ChatManager;
+
 class DatabaseManager : public QObject {
     Q_OBJECT
 public:
@@ -15,6 +17,7 @@ public:
     int registerUser(const QString& username, const QString& password);
     int loginUser(const QString& username, const QString& password);
     void setCurrentUser(int userId);
+    void setChatManager(ChatManager* mgr);
     int currentUserId() const;
     QString currentUsername();
 
@@ -40,5 +43,6 @@ private:
     QSqlDatabase m_db;
     int m_currentUserId = 0;
     bool m_ready = false;
+    ChatManager* m_chatMgr = nullptr;
     bool createTables();
 };

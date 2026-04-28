@@ -107,6 +107,85 @@ void ChatManager::requestChatHistory(const QString& with, int limit, int beforeM
     sendJson(obj);
 }
 
+// --- Review requests ---
+
+void ChatManager::requestSaveReview(const QString& doubanId, const QString& movieName,
+                                     double rating, const QString& content, bool isWished, bool isWatched,
+                                     const QString& posterUrl)
+{
+    QJsonObject obj;
+    obj["type"] = "save_review";
+    obj["douban_id"] = doubanId;
+    obj["movie_name"] = movieName;
+    obj["rating"] = rating;
+    obj["content"] = content;
+    obj["is_wished"] = isWished;
+    obj["is_watched"] = isWatched;
+    obj["poster_url"] = posterUrl;
+    sendJson(obj);
+}
+
+void ChatManager::requestGetReview(const QString& doubanId)
+{
+    QJsonObject obj;
+    obj["type"] = "get_review";
+    obj["douban_id"] = doubanId;
+    sendJson(obj);
+}
+
+void ChatManager::requestGetAllReviews()
+{
+    QJsonObject obj;
+    obj["type"] = "get_all_reviews";
+    sendJson(obj);
+}
+
+void ChatManager::requestDeleteReview(const QString& doubanId)
+{
+    QJsonObject obj;
+    obj["type"] = "delete_review";
+    obj["douban_id"] = doubanId;
+    sendJson(obj);
+}
+
+void ChatManager::requestGetWishList()
+{
+    QJsonObject obj;
+    obj["type"] = "get_wish_list";
+    sendJson(obj);
+}
+
+void ChatManager::requestGetWatchedList()
+{
+    QJsonObject obj;
+    obj["type"] = "get_watched_list";
+    sendJson(obj);
+}
+
+void ChatManager::requestGetProfile()
+{
+    QJsonObject obj;
+    obj["type"] = "get_profile";
+    sendJson(obj);
+}
+
+void ChatManager::requestSaveProfile(const QString& name, const QString& bio)
+{
+    QJsonObject obj;
+    obj["type"] = "save_profile";
+    obj["name"] = name;
+    obj["bio"] = bio;
+    sendJson(obj);
+}
+
+void ChatManager::requestSaveAvatar(const QString& avatarPath)
+{
+    QJsonObject obj;
+    obj["type"] = "save_avatar";
+    obj["avatar_path"] = avatarPath;
+    sendJson(obj);
+}
+
 void ChatManager::onConnected()
 {
     qDebug() << "ChatManager: connected to server";
@@ -185,6 +264,80 @@ void ChatManager::onTextMessageReceived(const QString& message)
             messages.append(msg);
         }
         emit chatHistoryReceived(with, messages, hasMore);
+    } else if (type == "review_result") {
+        bool success = obj["success"].toBool();
+        QString doubanId = obj["douban_id"].toString();
+        if (success && obj.contains("review")) {
+            QJsonObject r = obj["review"].toObject();
+            UserReview review;
+            review.id = r["id"].toInt();
+            review.doubanId = r["douban_id"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.content = r["content"].toString();
+            review.isWished = r["is_wished"].toBool();
+            review.isWatched = r["is_watched"].toBool();
+            review.posterUrl = r["poster_url"].toString();
+            review.createTime = r["create_time"].toString();
+            emit reviewReceived(review);
+        }
+        emit reviewSaved(success, doubanId);
+    } else if (type == "reviews_list") {
+        QList<UserReview> list;
+        QJsonArray arr = obj["reviews"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject r = v.toObject();
+            UserReview review;
+            review.id = r["id"].toInt();
+            review.doubanId = r["douban_id"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.content = r["content"].toString();
+            review.isWished = r["is_wished"].toBool();
+            review.isWatched = r["is_watched"].toBool();
+            review.posterUrl = r["poster_url"].toString();
+            review.createTime = r["create_time"].toString();
+            list.append(review);
+        }
+        emit reviewsListReceived(list);
+    } else if (type == "delete_review_result") {
+        emit reviewDeleted(obj["success"].toBool(), obj["douban_id"].toString());
+    } else if (type == "wish_list") {
+        QList<UserReview> list;
+        QJsonArray arr = obj["movies"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject r = v.toObject();
+            UserReview review;
+            review.doubanId = r["douban_id"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.posterUrl = r["poster_url"].toString();
+            review.isWished = true;
+            list.append(review);
+        }
+        emit wishListReceived(list);
+    } else if (type == "watched_list") {
+        QList<UserReview> list;
+        QJsonArray arr = obj["movies"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject r = v.toObject();
+            UserReview review;
+            review.doubanId = r["douban_id"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.posterUrl = r["poster_url"].toString();
+            review.isWatched = true;
+            list.append(review);
+        }
+        emit watchedListReceived(list);
+    } else if (type == "profile_data") {
+        emit profileReceived(obj["name"].toString(),
+                             obj["bio"].toString(),
+                             obj["avatar_path"].toString());
+    } else if (type == "profile_saved") {
+        emit profileSaved(obj["success"].toBool());
+    } else if (type == "avatar_saved") {
+        emit avatarSaved(obj["success"].toBool());
     }
 }
 
