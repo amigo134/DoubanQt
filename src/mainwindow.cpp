@@ -244,7 +244,7 @@ void MainWindow::buildUI()
 
     m_homeWidget = new HomeWidget(m_db, this);
     m_searchResultWidget = new SearchResultWidget(this);
-    m_detailWidget = new MovieDetailWidget(m_db, this);
+    m_detailWidget = new MovieDetailWidget(m_db, m_chatMgr, this);
     m_friendsWidget = new FriendsWidget(m_chatMgr, this);
     m_profileWidget = new ProfileWidget(m_db, this);
 

@@ -15,6 +15,7 @@ struct ServerMsg {
 struct ReviewData {
     int id = 0;
     int userId = 0;
+    QString username;
     QString doubanId;
     QString movieName;
     double rating = 0;
@@ -68,6 +69,8 @@ public:
     bool deleteReview(int userId, const QString& doubanId);
     QList<ReviewData> getWishList(int userId);
     QList<ReviewData> getWatchedList(int userId);
+    QList<ReviewData> getPublicReviewsByMovie(const QString& doubanId);
+    QList<ReviewData> getPublicReviewsByUser(int userId);
 
     // Profile
     ProfileData getProfile(int userId);

@@ -32,6 +32,8 @@ public:
     void requestGetProfile();
     void requestSaveProfile(const QString& name, const QString& bio);
     void requestSaveAvatar(const QString& avatarPath);
+    void requestMovieReviews(const QString& doubanId);
+    void requestUserReviews(const QString& username);
 
 signals:
     void connected();
@@ -58,6 +60,8 @@ signals:
     void profileReceived(const QString& name, const QString& bio, const QString& avatarPath);
     void profileSaved(bool success);
     void avatarSaved(bool success);
+    void movieReviewsReceived(const QString& doubanId, const QList<UserReview>& reviews);
+    void userReviewsReceived(const QString& username, const QList<UserReview>& reviews);
 
 private slots:
     void onConnected();

@@ -186,6 +186,22 @@ void ChatManager::requestSaveAvatar(const QString& avatarPath)
     sendJson(obj);
 }
 
+void ChatManager::requestMovieReviews(const QString& doubanId)
+{
+    QJsonObject obj;
+    obj["type"] = "get_movie_reviews";
+    obj["douban_id"] = doubanId;
+    sendJson(obj);
+}
+
+void ChatManager::requestUserReviews(const QString& username)
+{
+    QJsonObject obj;
+    obj["type"] = "get_user_reviews";
+    obj["username"] = username;
+    sendJson(obj);
+}
+
 void ChatManager::onConnected()
 {
     qDebug() << "ChatManager: connected to server";
@@ -338,6 +354,42 @@ void ChatManager::onTextMessageReceived(const QString& message)
         emit profileSaved(obj["success"].toBool());
     } else if (type == "avatar_saved") {
         emit avatarSaved(obj["success"].toBool());
+    } else if (type == "movie_reviews") {
+        QString doubanId = obj["douban_id"].toString();
+        QList<UserReview> list;
+        QJsonArray arr = obj["reviews"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject r = v.toObject();
+            UserReview review;
+            review.id = r["id"].toInt();
+            review.doubanId = doubanId;
+            review.username = r["username"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.content = r["content"].toString();
+            review.createTime = r["create_time"].toString();
+            list.append(review);
+        }
+        emit movieReviewsReceived(doubanId, list);
+    } else if (type == "user_reviews") {
+        QString username = obj["username"].toString();
+        QList<UserReview> list;
+        QJsonArray arr = obj["reviews"].toArray();
+        for (const QJsonValue& v : arr) {
+            QJsonObject r = v.toObject();
+            UserReview review;
+            review.id = r["id"].toInt();
+            review.doubanId = r["douban_id"].toString();
+            review.movieName = r["movie_name"].toString();
+            review.rating = r["rating"].toDouble();
+            review.content = r["content"].toString();
+            review.isWished = r["is_wished"].toBool();
+            review.isWatched = r["is_watched"].toBool();
+            review.posterUrl = r["poster_url"].toString();
+            review.createTime = r["create_time"].toString();
+            list.append(review);
+        }
+        emit userReviewsReceived(username, list);
     }
 }
 

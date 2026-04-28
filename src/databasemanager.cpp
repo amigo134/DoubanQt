@@ -168,14 +168,19 @@ UserReview DatabaseManager::getReview(const QString& doubanId)
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewReceived,
+    QMetaObject::Connection conn1 = connect(m_chatMgr, &ChatManager::reviewReceived,
         [&](const UserReview& review) {
             if (review.doubanId == doubanId) { result = review; loop.quit(); }
+        });
+    QMetaObject::Connection conn2 = connect(m_chatMgr, &ChatManager::reviewSaved,
+        [&](bool success, const QString& did) {
+            if (did == doubanId && !success) loop.quit();
         });
 
     m_chatMgr->requestGetReview(doubanId);
     loop.exec();
-    disconnect(conn);
+    disconnect(conn1);
+    disconnect(conn2);
     return result;
 }
 
@@ -379,6 +384,44 @@ QList<UserReview> DatabaseManager::getWatchedList()
         [&](const QList<UserReview>& list) { result = list; loop.quit(); });
 
     m_chatMgr->requestGetWatchedList();
+    loop.exec();
+    disconnect(conn);
+    return result;
+}
+
+QList<UserReview> DatabaseManager::getMovieReviews(const QString& doubanId)
+{
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QList<UserReview> result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::movieReviewsReceived,
+        [&](const QString& did, const QList<UserReview>& list) {
+            if (did == doubanId) { result = list; loop.quit(); }
+        });
+
+    m_chatMgr->requestMovieReviews(doubanId);
+    loop.exec();
+    disconnect(conn);
+    return result;
+}
+
+QList<UserReview> DatabaseManager::getUserReviews(const QString& username)
+{
+    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+
+    QList<UserReview> result;
+    QEventLoop loop;
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+
+    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::userReviewsReceived,
+        [&](const QString& uname, const QList<UserReview>& list) {
+            if (uname == username) { result = list; loop.quit(); }
+        });
+
+    m_chatMgr->requestUserReviews(username);
     loop.exec();
     disconnect(conn);
     return result;

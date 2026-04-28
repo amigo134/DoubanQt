@@ -96,6 +96,7 @@ struct UserReview {
     int id = 0;
     QString doubanId;
     QString movieName;
+    QString username;
     double rating = 0.0;
     QString content;
     QString createTime;

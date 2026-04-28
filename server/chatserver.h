@@ -33,6 +33,8 @@ private:
     void handleGetProfile(QWebSocket* socket, const QJsonObject& obj);
     void handleSaveProfile(QWebSocket* socket, const QJsonObject& obj);
     void handleSaveAvatar(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetMovieReviews(QWebSocket* socket, const QJsonObject& obj);
+    void handleGetUserReviews(QWebSocket* socket, const QJsonObject& obj);
 
     void sendToSocket(QWebSocket* socket, const QJsonObject& obj);
     void sendToUser(int userId, const QJsonObject& obj);

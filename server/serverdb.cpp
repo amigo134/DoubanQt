@@ -587,6 +587,76 @@ QList<ReviewData> ServerDb::getWatchedList(int userId)
     return list;
 }
 
+QList<ReviewData> ServerDb::getPublicReviewsByMovie(const QString& doubanId)
+{
+    auto guard = m_pool->acquire();
+    if (!guard.valid()) return {};
+    QSqlDatabase db = QSqlDatabase::database(guard.name());
+    QSqlQuery q(db);
+
+    QList<ReviewData> list;
+    q.prepare(R"(
+        SELECT r.id, r.user_id, u.username, r.movie_name, r.rating, r.content, r.create_time, r.update_time
+        FROM reviews r JOIN users u ON r.user_id = u.id
+        WHERE r.douban_id = :did AND r.content IS NOT NULL AND r.content != ''
+        ORDER BY r.update_time DESC
+    )");
+    q.bindValue(":did", doubanId);
+
+    if (!q.exec()) return list;
+
+    while (q.next()) {
+        ReviewData r;
+        r.id = q.value(0).toInt();
+        r.userId = q.value(1).toInt();
+        r.username = q.value(2).toString();
+        r.doubanId = doubanId;
+        r.movieName = q.value(3).toString();
+        r.rating = q.value(4).toDouble();
+        r.content = q.value(5).toString();
+        r.createTime = q.value(6).toString();
+        r.updateTime = q.value(7).toString();
+        list.append(r);
+    }
+    return list;
+}
+
+QList<ReviewData> ServerDb::getPublicReviewsByUser(int userId)
+{
+    auto guard = m_pool->acquire();
+    if (!guard.valid()) return {};
+    QSqlDatabase db = QSqlDatabase::database(guard.name());
+    QSqlQuery q(db);
+
+    QList<ReviewData> list;
+    q.prepare(R"(
+        SELECT r.id, r.douban_id, r.movie_name, r.rating, r.content, r.is_wished, r.is_watched, r.poster_url, r.create_time, r.update_time
+        FROM reviews r
+        WHERE r.user_id = :uid AND r.content IS NOT NULL AND r.content != ''
+        ORDER BY r.update_time DESC
+    )");
+    q.bindValue(":uid", userId);
+
+    if (!q.exec()) return list;
+
+    while (q.next()) {
+        ReviewData r;
+        r.id = q.value(0).toInt();
+        r.userId = userId;
+        r.doubanId = q.value(1).toString();
+        r.movieName = q.value(2).toString();
+        r.rating = q.value(3).toDouble();
+        r.content = q.value(4).toString();
+        r.isWished = q.value(5).toBool();
+        r.isWatched = q.value(6).toBool();
+        r.posterUrl = q.value(7).toString();
+        r.createTime = q.value(8).toString();
+        r.updateTime = q.value(9).toString();
+        list.append(r);
+    }
+    return list;
+}
+
 // --- Profile ---
 
 ProfileData ServerDb::getProfile(int userId)

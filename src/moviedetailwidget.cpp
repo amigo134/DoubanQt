@@ -1,4 +1,5 @@
 #include "moviedetailwidget.h"
+#include "chatmanager.h"
 #include "reviewdialog.h"
 #include "imagecache.h"
 #include <QVBoxLayout>
@@ -10,11 +11,17 @@
 #include <QPainterPath>
 #include <QScrollBar>
 
-MovieDetailWidget::MovieDetailWidget(DatabaseManager* db, QWidget* parent)
+MovieDetailWidget::MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
+    , m_chatMgr(chatMgr)
 {
     buildUI();
+
+    connect(m_chatMgr, &ChatManager::reviewReceived,
+            this, &MovieDetailWidget::onReviewReceived);
+    connect(m_chatMgr, &ChatManager::movieReviewsReceived,
+            this, &MovieDetailWidget::onMovieReviewsReceived);
 }
 
 void MovieDetailWidget::buildUI()
@@ -345,6 +352,19 @@ void MovieDetailWidget::buildUI()
     userRatingLayout->addWidget(m_userReviewLabel);
 
     contentLayout->addWidget(userRatingCard);
+
+    // --- Public reviews section ---
+    auto* publicTitle = new QLabel("全部评价");
+    publicTitle->setObjectName("sectionTitle");
+    contentLayout->addWidget(publicTitle);
+
+    m_publicReviewsWidget = new QWidget();
+    m_publicReviewsWidget->setStyleSheet("background: white; border-radius: 10px; padding: 16px; border: 1px solid #EEE;");
+    m_publicReviewsLayout = new QVBoxLayout(m_publicReviewsWidget);
+    m_publicReviewsLayout->setContentsMargins(0, 0, 0, 0);
+    m_publicReviewsLayout->setSpacing(12);
+    contentLayout->addWidget(m_publicReviewsWidget);
+
     contentLayout->addStretch();
 }
 
@@ -378,10 +398,17 @@ void MovieDetailWidget::updateTopLayout()
 void MovieDetailWidget::setMovie(const Movie& movie)
 {
     m_movie = movie;
-    m_userReview = m_db->getReview(movie.doubanId);
-    m_movie.userRating = m_userReview.rating;
-    m_movie.isWished = m_userReview.isWished;
-    m_movie.isWatched = m_userReview.isWatched;
+    m_userReview = UserReview(); // reset, will be filled async
+    m_movie.userRating = 0;
+    m_movie.isWished = false;
+    m_movie.isWatched = false;
+    updateUserSection();
+    refreshPublicReviews({}); // clear old reviews, show empty state until data arrives
+
+    // Async: request current user's review
+    m_chatMgr->requestGetReview(movie.doubanId);
+    // Async: request all users' reviews
+    m_chatMgr->requestMovieReviews(movie.doubanId);
 
     m_titleLabel->setText(movie.getName());
     m_originalTitleLabel->setText(movie.originalName != movie.getName()
@@ -468,7 +495,6 @@ void MovieDetailWidget::setMovie(const Movie& movie)
         m_rottenRatingLabel->setText("--");
 
     loadPoster(movie.getPoster());
-    updateUserSection();
     updateTopLayout();
     m_scrollArea->verticalScrollBar()->setValue(0);
 }
@@ -525,6 +551,81 @@ void MovieDetailWidget::updateUserSection()
     }
 }
 
+static QWidget* createReviewCard(const UserReview& review)
+{
+    auto* card = new QWidget();
+    card->setStyleSheet("background: #F9F9FB; border-radius: 8px;");
+
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(14, 10, 14, 10);
+    layout->setSpacing(6);
+
+    auto* header = new QHBoxLayout();
+    auto* nameLabel = new QLabel(review.username.isEmpty() ? "匿名" : review.username);
+    nameLabel->setStyleSheet("font-size: 13px; font-weight: bold; color: #00B51D;");
+    header->addWidget(nameLabel);
+
+    if (review.rating > 0) {
+        auto* starLabel = new QLabel();
+        int fullStars = qRound(review.rating / 2.0);
+        starLabel->setText(QString("★").repeated(fullStars) + QString("☆").repeated(5 - fullStars));
+        starLabel->setStyleSheet("font-size: 11px; color: #F5A623;");
+        header->addWidget(starLabel);
+    }
+    header->addStretch();
+
+    auto* timeLabel = new QLabel(review.createTime.length() > 10
+                                 ? review.createTime.left(10) : review.createTime);
+    timeLabel->setStyleSheet("font-size: 11px; color: #BBB;");
+    header->addWidget(timeLabel);
+    layout->addLayout(header);
+
+    auto* contentLabel = new QLabel(review.content);
+    contentLabel->setWordWrap(true);
+    contentLabel->setStyleSheet("font-size: 14px; color: #444; line-height: 1.6;");
+    layout->addWidget(contentLabel);
+
+    return card;
+}
+
+void MovieDetailWidget::refreshPublicReviews(const QList<UserReview>& reviews)
+{
+    QLayoutItem* item;
+    while ((item = m_publicReviewsLayout->takeAt(0)) != nullptr) {
+        if (item->widget()) delete item->widget();
+        delete item;
+    }
+
+    if (reviews.isEmpty()) {
+        auto* emptyLabel = new QLabel("暂无评价，成为第一个评价的人吧！");
+        emptyLabel->setStyleSheet("font-size: 14px; color: #BBB; padding: 20px;");
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        m_publicReviewsLayout->addWidget(emptyLabel);
+        return;
+    }
+
+    for (const auto& review : reviews) {
+        m_publicReviewsLayout->addWidget(createReviewCard(review));
+    }
+}
+
+void MovieDetailWidget::onReviewReceived(const UserReview& review)
+{
+    if (review.doubanId != m_movie.doubanId) return;
+
+    m_userReview = review;
+    m_movie.userRating = review.rating;
+    m_movie.isWished = review.isWished;
+    m_movie.isWatched = review.isWatched;
+    updateUserSection();
+}
+
+void MovieDetailWidget::onMovieReviewsReceived(const QString& doubanId, const QList<UserReview>& reviews)
+{
+    if (doubanId != m_movie.doubanId) return;
+    refreshPublicReviews(reviews);
+}
+
 void MovieDetailWidget::onWriteReview()
 {
     ReviewDialog dlg(m_movie, m_userReview, this);
@@ -542,6 +643,7 @@ void MovieDetailWidget::onWriteReview()
         m_movie.isWished = m_userReview.isWished;
         m_movie.isWatched = m_userReview.isWatched;
         updateUserSection();
+        m_chatMgr->requestMovieReviews(m_movie.doubanId);
         emit reviewUpdated();
     }
 }

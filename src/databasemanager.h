@@ -39,6 +39,10 @@ public:
     void saveAvatarPath(const QString& path);
     void ensureProfile();
 
+    // Public reviews
+    QList<UserReview> getMovieReviews(const QString& doubanId);
+    QList<UserReview> getUserReviews(const QString& username);
+
 private:
     QSqlDatabase m_db;
     int m_currentUserId = 0;

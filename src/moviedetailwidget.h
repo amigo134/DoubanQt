@@ -10,10 +10,12 @@
 #include "ratingwidget.h"
 #include "databasemanager.h"
 
+class ChatManager;
+
 class MovieDetailWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit MovieDetailWidget(DatabaseManager* db, QWidget* parent = nullptr);
+    explicit MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, QWidget* parent = nullptr);
 
     void setMovie(const Movie& movie);
 
@@ -25,14 +27,18 @@ private slots:
     void onWriteReview();
     void onToggleWish();
     void onToggleWatched();
+    void onReviewReceived(const UserReview& review);
+    void onMovieReviewsReceived(const QString& doubanId, const QList<UserReview>& reviews);
 
 private:
     void loadPoster(const QString& url);
     void updateUserSection();
+    void refreshPublicReviews(const QList<UserReview>& reviews);
     void buildUI();
     void updateTopLayout();
 
     DatabaseManager* m_db;
+    ChatManager* m_chatMgr;
     Movie m_movie;
     UserReview m_userReview;
 
@@ -70,6 +76,11 @@ private:
     QGridLayout* m_topGrid;
     QWidget* m_infoWidget;
     QVBoxLayout* m_infoLayout;
+
+    // Public reviews section
+    QWidget* m_publicReviewsWidget;
+    QVBoxLayout* m_publicReviewsLayout;
+
     bool m_isVerticalLayout = false;
     static constexpr int NARROW_THRESHOLD = 560;
 };
