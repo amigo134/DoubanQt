@@ -125,6 +125,11 @@ void DatabaseManager::setServerApiClient(ServerApiClient* api)
     m_serverApi = api;
 }
 
+ServerApiClient* DatabaseManager::serverApi() const
+{
+    return m_serverApi;
+}
+
 int DatabaseManager::currentUserId() const
 {
     return m_currentUserId;
@@ -294,6 +299,7 @@ QString DatabaseManager::getAvatarPath()
 void DatabaseManager::saveAvatarPath(const QString& path)
 {
     int uid = serverUserId();
+    qDebug() << "[saveAvatarPath] path=" << path << "userId=" << uid << "serverApi=" << (m_serverApi != nullptr);
     if (!m_serverApi || uid == 0) return;
 
     QEventLoop loop;

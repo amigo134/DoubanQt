@@ -252,6 +252,7 @@ void MainWindow::buildUI()
     m_detailWidget = new MovieDetailWidget(m_db, m_chatMgr, m_serverApi, this);
     m_friendsWidget = new FriendsWidget(m_chatMgr, m_serverApi, this);
     m_profileWidget = new ProfileWidget(m_db, this);
+    m_profileWidget->setServerApiClient(m_serverApi);
 
     m_stackedWidget->addWidget(m_homeWidget);
     m_stackedWidget->addWidget(m_searchResultWidget);

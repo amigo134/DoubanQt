@@ -1,5 +1,6 @@
 #include "chatmessagedelegate.h"
 #include "chatmodel.h"
+#include "avatarcache.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QFontMetrics>
@@ -70,6 +71,7 @@ void ChatMessageDelegate::paintMessage(QPainter* painter,
     QRect rect = option.rect;
     bool isOwn = index.data(ChatMessageModel::IsOwnRole).toBool();
     QString from = index.data(ChatMessageModel::FromRole).toString();
+    int fromId = index.data(ChatMessageModel::FromIdRole).toInt();
     QString content = index.data(ChatMessageModel::ContentRole).toString();
 
     int avatarX = isOwn ? rect.right() - ITEM_H_MARGIN - AVATAR_SIZE
@@ -104,7 +106,7 @@ void ChatMessageDelegate::paintMessage(QPainter* painter,
                           Qt::AlignLeft, from);
     }
 
-    drawAvatar(painter, QRect(avatarX, avatarY, AVATAR_SIZE, AVATAR_SIZE), from, isOwn);
+    drawAvatar(painter, QRect(avatarX, avatarY, AVATAR_SIZE, AVATAR_SIZE), from, fromId, isOwn);
 
     drawBubble(painter, bubbleRect, isOwn);
 
@@ -120,27 +122,37 @@ void ChatMessageDelegate::paintMessage(QPainter* painter,
 }
 
 void ChatMessageDelegate::drawAvatar(QPainter* painter, const QRect& rect,
-                                     const QString& name, bool isOwn) const
+                                     const QString& name, int userId, bool isOwn) const
 {
-    QColor color = isOwn ? QColor("#00B51D") : QColor("#3498DB");
-
+    painter->save();
     QPainterPath path;
     path.addEllipse(rect);
     painter->setClipPath(path);
 
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(color);
-    painter->drawEllipse(rect);
+    QPixmap cached = AvatarCache::get(userId);
+    if (!cached.isNull()) {
+        QPixmap scaled = cached.scaled(rect.width(), rect.height(),
+                                       Qt::KeepAspectRatioByExpanding,
+                                       Qt::SmoothTransformation);
+        int dx = (rect.width() - scaled.width()) / 2;
+        int dy = (rect.height() - scaled.height()) / 2;
+        painter->drawPixmap(rect.x() + dx, rect.y() + dy, scaled);
+    } else {
+        QColor color = isOwn ? QColor("#00B51D") : QColor("#3498DB");
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(color);
+        painter->drawEllipse(rect);
 
-    QString initial = name.isEmpty() ? QString("?") : QString(name.at(0)).toUpper();
-    QFont font;
-    font.setPixelSize(rect.width() * 0.45);
-    font.setBold(true);
-    painter->setFont(font);
-    painter->setPen(Qt::white);
-    painter->drawText(rect, Qt::AlignCenter, initial);
+        QString initial = name.isEmpty() ? QString("?") : QString(name.at(0)).toUpper();
+        QFont font;
+        font.setPixelSize(rect.width() * 0.45);
+        font.setBold(true);
+        painter->setFont(font);
+        painter->setPen(Qt::white);
+        painter->drawText(rect, Qt::AlignCenter, initial);
+    }
 
-    painter->setClipping(false);
+    painter->restore();
 }
 
 void ChatMessageDelegate::drawBubble(QPainter* painter, const QRect& bubbleRect,

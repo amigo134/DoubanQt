@@ -1,4 +1,5 @@
 #include "serverapiclient.h"
+#include "avatarcache.h"
 #include <QJsonDocument>
 #include <QHttpMultiPart>
 #include <QFile>
@@ -188,6 +189,18 @@ void ServerApiClient::saveProfile(int userId, const QString& name, const QString
 
 void ServerApiClient::uploadAvatar(int userId, const QString& filePath)
 {
+    qDebug() << "[uploadAvatar] userId=" << userId << "filePath=" << filePath;
+    // Read file data for local cache update on success
+    QFile localFile(filePath);
+    QByteArray fileData;
+    if (localFile.open(QIODevice::ReadOnly)) {
+        fileData = localFile.readAll();
+        localFile.close();
+        qDebug() << "[uploadAvatar] read local file, size=" << fileData.size();
+    } else {
+        qDebug() << "[uploadAvatar] FAILED to read local file";
+    }
+
     QFile* file = new QFile(filePath);
     if (!file->open(QIODevice::ReadOnly)) {
         delete file;
@@ -218,10 +231,14 @@ void ServerApiClient::uploadAvatar(int userId, const QString& filePath)
     QNetworkReply* reply = m_nam->post(req, multiPart);
     multiPart->setParent(reply); // reply takes ownership
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, userId, fileData]() {
         reply->deleteLater();
         QJsonObject resp = QJsonDocument::fromJson(reply->readAll()).object();
-        emit avatarSaved(resp["success"].toBool());
+        bool ok = resp["success"].toBool();
+        qDebug() << "[uploadAvatar] reply ok=" << ok << "fileData size=" << fileData.size();
+        if (ok && !fileData.isEmpty())
+            AvatarCache::put(userId, fileData);
+        emit avatarSaved(ok);
     });
 }
 
@@ -430,5 +447,28 @@ void ServerApiClient::getUserReviews(int userId)
         }
         // Use empty username — caller knows whose reviews they are
         emit userReviewsReceived(QString(), list);
+    });
+}
+
+void ServerApiClient::downloadAvatar(int userId)
+{
+    qDebug() << "[downloadAvatar] userId=" << userId;
+    if (AvatarCache::exists(userId)) {
+        qDebug() << "[downloadAvatar] already cached";
+        emit avatarDownloaded(userId);
+        return;
+    }
+
+    QNetworkReply* reply = get(QString("/api/avatar/%1").arg(userId));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, userId]() {
+        reply->deleteLater();
+        int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug() << "[downloadAvatar] reply status=" << status << "error=" << reply->error();
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray data = reply->readAll();
+            qDebug() << "[downloadAvatar] downloaded" << data.size() << "bytes";
+            AvatarCache::put(userId, data);
+        }
+        emit avatarDownloaded(userId);
     });
 }

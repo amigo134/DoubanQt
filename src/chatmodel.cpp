@@ -24,6 +24,10 @@ QVariant ChatMessageModel::data(const QModelIndex& index, int role) const
         return static_cast<int>(item.type);
     case FromRole:
         return item.msg.from;
+    case FromIdRole:
+        return item.msg.fromId;
+    case ToIdRole:
+        return item.msg.toId;
     case ContentRole:
         return item.msg.content;
     case TimeRole:
@@ -44,6 +48,8 @@ QHash<int, QByteArray> ChatMessageModel::roleNames() const
     return {
         {ItemTypeRole, "itemType"},
         {FromRole, "from"},
+        {FromIdRole, "fromId"},
+        {ToIdRole, "toId"},
         {ContentRole, "content"},
         {TimeRole, "time"},
         {IsOwnRole, "isOwn"},

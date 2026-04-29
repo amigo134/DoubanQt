@@ -38,6 +38,12 @@ FriendsWidget::FriendsWidget(ChatManager* chatMgr, ServerApiClient* serverApi, Q
             this, &FriendsWidget::onAddFriendResult);
     connect(m_serverApi, &ServerApiClient::chatHistoryReceived,
             this, &FriendsWidget::onChatHistoryReceived);
+    connect(m_serverApi, &ServerApiClient::avatarDownloaded,
+            this, [this](int) { m_chatListView->viewport()->update(); });
+    connect(m_serverApi, &ServerApiClient::avatarSaved,
+            this, [this](bool) {
+        if (m_chatListView->viewport()) m_chatListView->viewport()->update();
+    });
 }
 
 bool FriendsWidget::eventFilter(QObject* watched, QEvent* event)
@@ -253,6 +259,8 @@ void FriendsWidget::onLoginResult(bool success)
         m_statusLabel->setText("已连接");
         m_statusLabel->setStyleSheet("background: #E8F5E9; color: #00B51D; font-size: 12px; border-bottom: 1px solid #E8E8EC;");
         emit connectionStatusChanged(true);
+        int myId = m_chatMgr->serverUserId();
+        if (myId > 0) m_serverApi->downloadAvatar(myId);
         refreshFriendList();
     } else {
         m_statusLabel->setText("连接失败");
@@ -265,6 +273,9 @@ void FriendsWidget::onFriendListReceived(const QList<FriendInfo>& friends)
 {
     m_friends = friends;
     updateFriendListUI();
+    for (const auto& f : friends) {
+        if (f.userId > 0) m_serverApi->downloadAvatar(f.userId);
+    }
 }
 
 void FriendsWidget::onFriendRequestReceived(const QString& from, int fromId)
@@ -296,6 +307,8 @@ void FriendsWidget::onFriendAccepted(const QString& username, int userId)
 
 void FriendsWidget::onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId, int fromId)
 {
+    if (fromId > 0) m_serverApi->downloadAvatar(fromId);
+
     ChatMsg msg;
     msg.id = msgId;
     msg.fromId = fromId;
@@ -319,6 +332,7 @@ void FriendsWidget::onMessageSent(const QString& to, const QString& content, con
 {
     ChatMsg msg;
     msg.id = msgId;
+    msg.fromId = m_chatMgr->serverUserId();
     msg.toId = toId;
     msg.from = m_chatMgr->currentUsername();
     msg.to = to;

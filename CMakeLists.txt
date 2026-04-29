@@ -34,6 +34,7 @@ set(SOURCES
     src/chatmodel.cpp
     src/chatmessagedelegate.cpp
     src/serverapiclient.cpp
+    src/avatarcache.cpp
 )
 
 set(HEADERS
@@ -60,6 +61,7 @@ set(HEADERS
     src/chatmessagedelegate.h
     src/loadingwidget.h
     src/serverapiclient.h
+    src/avatarcache.h
 )
 
 set(RESOURCES

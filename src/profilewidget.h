@@ -10,10 +10,13 @@
 #include "moviemodel.h"
 #include "databasemanager.h"
 
+class ServerApiClient;
+
 class ProfileWidget : public QWidget {
     Q_OBJECT
 public:
     explicit ProfileWidget(DatabaseManager* db, QWidget* parent = nullptr);
+    void setServerApiClient(ServerApiClient* api);
 
     void refresh();
 
@@ -29,7 +32,7 @@ private:
     void buildUI();
     void loadData();
     void loadProfile();
-    void loadAvatar(const QString& path);
+    void loadAvatar(const QPixmap& pixmap);
     void saveProfile(const QString& name, const QString& bio);
     void rebuildWishRows();
     void rebuildWatchedRows();
@@ -37,6 +40,7 @@ private:
     int calcCols(int cardW) const;
 
     DatabaseManager* m_db;
+    ServerApiClient* m_serverApi = nullptr;
     QTimer* m_resizeTimer;
 
     QLabel* m_avatarLabel;

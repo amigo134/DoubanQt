@@ -50,6 +50,8 @@ public:
     enum Roles {
         ItemTypeRole = Qt::UserRole + 1,
         FromRole,
+        FromIdRole,
+        ToIdRole,
         ContentRole,
         TimeRole,
         IsOwnRole,

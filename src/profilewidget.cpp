@@ -1,6 +1,8 @@
 #include "profilewidget.h"
 #include "profileeditdialog.h"
 #include "imagecache.h"
+#include "avatarcache.h"
+#include "serverapiclient.h"
 #include <QFrame>
 #include <QPainter>
 #include <QPainterPath>
@@ -26,6 +28,20 @@ ProfileWidget::ProfileWidget(DatabaseManager* db, QWidget* parent)
     });
 
     buildUI();
+}
+
+void ProfileWidget::setServerApiClient(ServerApiClient* api)
+{
+    m_serverApi = api;
+    if (api) {
+        connect(api, &ServerApiClient::avatarDownloaded, this, [this](int userId) {
+            if (userId == m_db->serverUserId())
+                loadAvatar(AvatarCache::get(userId));
+        });
+        connect(api, &ServerApiClient::avatarSaved, this, [this](bool) {
+            loadAvatar(AvatarCache::get(m_db->serverUserId()));
+        });
+    }
 }
 
 void ProfileWidget::buildUI()
@@ -477,8 +493,9 @@ bool ProfileWidget::eventFilter(QObject* watched, QEvent* event)
                 QString dest = dataPath + "/avatar" + QFileInfo(path).suffix().prepend('.');
                 QFile::remove(dest);
                 QFile::copy(path, dest);
+                qDebug() << "[avatar click] dest=" << dest << "serverUserId=" << m_db->serverUserId();
                 m_db->saveAvatarPath(dest);
-                loadAvatar(dest);
+                loadAvatar(QPixmap(dest));
             }
             return true;
         }
@@ -525,9 +542,11 @@ void ProfileWidget::loadProfile()
     m_nameLabel->setText(name.isEmpty() ? "影迷" : name);
     m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
 
-    QString avatarPath = m_db->getAvatarPath();
-    if (!avatarPath.isEmpty() && QFile::exists(avatarPath)) {
-        loadAvatar(avatarPath);
+    int uid = m_db->serverUserId();
+    qDebug() << "[loadProfile] serverUserId=" << uid;
+    QPixmap cached = AvatarCache::get(uid);
+    if (!cached.isNull()) {
+        loadAvatar(cached);
     } else {
         m_avatarLabel->setPixmap(QPixmap());
         m_avatarLabel->setText(name.isEmpty() ? "U" : name.left(1).toUpper());
@@ -538,12 +557,13 @@ void ProfileWidget::loadProfile()
             color: white;
             font-weight: bold;
         )");
+        if (uid > 0 && m_db->serverApi())
+            m_db->serverApi()->downloadAvatar(uid);
     }
 }
 
-void ProfileWidget::loadAvatar(const QString& path)
+void ProfileWidget::loadAvatar(const QPixmap& pix)
 {
-    QPixmap pix(path);
     if (pix.isNull()) return;
     int size = m_avatarLabel->width();
     QPixmap scaled = pix.scaled(size, size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
@@ -568,8 +588,9 @@ void ProfileWidget::saveProfile(const QString& name, const QString& bio)
     m_db->saveProfile(name, bio);
     m_nameLabel->setText(name);
     m_bioLabel->setText(bio.isEmpty() ? "记录每一部看过的电影" : bio);
-    QString avatarPath = m_db->getAvatarPath();
-    if (avatarPath.isEmpty() || !QFile::exists(avatarPath)) {
+
+    QPixmap cached = AvatarCache::get(m_db->serverUserId());
+    if (cached.isNull()) {
         m_avatarLabel->setPixmap(QPixmap());
         m_avatarLabel->setText(name.left(1).toUpper());
         m_avatarLabel->setStyleSheet(R"(

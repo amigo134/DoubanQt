@@ -28,6 +28,7 @@ public:
     void getProfile(int userId);
     void saveProfile(int userId, const QString& name, const QString& bio);
     void uploadAvatar(int userId, const QString& filePath);
+    void downloadAvatar(int userId);
 
     // Reviews
     void saveReview(int userId, const QString& doubanId, const QString& movieName,
@@ -57,6 +58,7 @@ signals:
     void profileReceived(const QString& name, const QString& bio, const QString& avatarPath);
     void profileSaved(bool success);
     void avatarSaved(bool success);
+    void avatarDownloaded(int userId);
 
     // Reviews — match ChatManager signal names
     void reviewSaved(bool success, const QString& doubanId);

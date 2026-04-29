@@ -609,7 +609,12 @@ void HttpServer::handleUploadAvatar(QTcpSocket* socket, const Request& req)
     QString ctype = req.headers.value("content-type");
     QString boundary;
     int bi = ctype.indexOf("boundary=");
-    if (bi >= 0) boundary = ctype.mid(bi + 9).trimmed();
+    if (bi >= 0) {
+        boundary = ctype.mid(bi + 9).trimmed();
+        // Qt QHttpMultiPart quotes the boundary value
+        if (boundary.startsWith('"') && boundary.endsWith('"'))
+            boundary = boundary.mid(1, boundary.size() - 2);
+    }
 
     if (boundary.isEmpty()) {
         sendError(socket, 400, "multipart/form-data required");

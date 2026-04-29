@@ -18,7 +18,7 @@ private:
     void paintMessage(QPainter* painter, const QStyleOptionViewItem& option,
                       const QModelIndex& index) const;
     void drawAvatar(QPainter* painter, const QRect& rect, const QString& name,
-                    bool isOwn) const;
+                    int userId, bool isOwn) const;
     void drawBubble(QPainter* painter, const QRect& bubbleRect, bool isOwn) const;
     QRect calcBubbleRect(const QFontMetrics& fm, const QString& content,
                          int availWidth, bool isOwn) const;

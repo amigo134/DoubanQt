@@ -20,8 +20,10 @@ public:
     void setCurrentUser(int userId);
     void setChatManager(ChatManager* mgr);
     void setServerApiClient(ServerApiClient* api);
+    ServerApiClient* serverApi() const;
     int currentUserId() const;
     QString currentUsername();
+    int serverUserId() const;
 
     bool saveReview(const UserReview& review);
     UserReview getReview(const QString& doubanId);
@@ -52,5 +54,4 @@ private:
     ChatManager* m_chatMgr = nullptr;
     ServerApiClient* m_serverApi = nullptr;
     bool createTables();
-    int serverUserId() const;
 };
