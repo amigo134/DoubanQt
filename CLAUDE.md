@@ -91,6 +91,11 @@ cp build/DoubanQt.exe build_server/ChatServer.exe dist/
 - debug 输出在启动后的控制台窗口里（qDebug）
 - 服务端 HTTP API 可用 curl 测试：`curl http://localhost:8766/api/login -d ...`
 
+### 遇到问题先 debug，不要猜
+- 先用 `qDebug()` 加日志，看实际数据是什么
+- 确认根因后再改代码，不要凭猜测反复改
+- 典型的错误模式：头像不显示 → 改了缓存、改了下载触发、改了重绘，最后发现是 multipart boundary 引号解析失败，前三步都是无效改动
+
 ### 数据模型规范
 - 服务端 JSON 响应必须同时返回 `user_id` + `username`，`from_id` + `from`
 - 客户端结构体存 ID 字段，匹配用 ID，显示用名字
