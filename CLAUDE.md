@@ -71,3 +71,33 @@ dou/
 - dist/ 目录是发布用的
 - Git 仓库：https://github.com/amigo134/DoubanQt
 - 服务端 DB 连接参数硬编码在 serverdb.cpp（localhost:3306, root/123456）
+
+## 开发流程
+
+### 构建与发布
+```bash
+# 客户端
+cmake --build /c/Users/COZY/Desktop/dou/build
+
+# 服务端
+cmake --build /c/Users/COZY/Desktop/dou/build_server
+
+# 构建后必须复制到 dist/
+cp build/DoubanQt.exe build_server/ChatServer.exe dist/
+```
+
+### 启动测试
+- 用 `dist/start.bat` 启动服务端+两个客户端
+- debug 输出在启动后的控制台窗口里（qDebug）
+- 服务端 HTTP API 可用 curl 测试：`curl http://localhost:8766/api/login -d ...`
+
+### 数据模型规范
+- 服务端 JSON 响应必须同时返回 `user_id` + `username`，`from_id` + `from`
+- 客户端结构体存 ID 字段，匹配用 ID，显示用名字
+- 新增字段时，修改链路：struct → 服务端 JSON → 客户端解析 → 客户端使用
+
+### 通信架构
+- 实时推送（聊天消息、上线通知）→ WebSocket :8765
+- 请求/响应（登录、好友、影评、头像、资料）→ HTTP :8766
+- 头像缓存：`exeDir/cache/avatars/{userId}.png`
+- 客户端 `ServerApiClient` 基地址写死在代码里，部署跨电脑时需改
