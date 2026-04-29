@@ -5,12 +5,15 @@
 #include <QDateTime>
 
 struct FriendInfo {
+    int userId = 0;
     QString username;
     bool online = false;
 };
 
 struct ChatMsg {
     int id = 0;
+    int fromId = 0;
+    int toId = 0;
     QString from;
     QString to;
     QString content;

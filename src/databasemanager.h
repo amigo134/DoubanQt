@@ -4,6 +4,7 @@
 #include "moviemodel.h"
 
 class ChatManager;
+class ServerApiClient;
 
 class DatabaseManager : public QObject {
     Q_OBJECT
@@ -18,6 +19,7 @@ public:
     int loginUser(const QString& username, const QString& password);
     void setCurrentUser(int userId);
     void setChatManager(ChatManager* mgr);
+    void setServerApiClient(ServerApiClient* api);
     int currentUserId() const;
     QString currentUsername();
 
@@ -48,5 +50,7 @@ private:
     int m_currentUserId = 0;
     bool m_ready = false;
     ChatManager* m_chatMgr = nullptr;
+    ServerApiClient* m_serverApi = nullptr;
     bool createTables();
+    int serverUserId() const;
 };

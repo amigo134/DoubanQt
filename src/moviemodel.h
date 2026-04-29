@@ -94,6 +94,7 @@ struct Movie {
 
 struct UserReview {
     int id = 0;
+    int userId = 0;
     QString doubanId;
     QString movieName;
     QString username;

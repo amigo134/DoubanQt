@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "logindialog.h"
+#include "serverapiclient.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QWidget>
@@ -20,6 +21,10 @@ MainWindow::MainWindow(QWidget* parent)
 {
     m_db->initialize();
     m_db->setChatManager(m_chatMgr);
+
+    auto* serverApi = new ServerApiClient(this);
+    m_db->setServerApiClient(serverApi);
+    m_serverApi = serverApi;
 
     if (!m_db->isReady()) {
         QMessageBox::critical(nullptr, "数据库错误",
@@ -244,8 +249,8 @@ void MainWindow::buildUI()
 
     m_homeWidget = new HomeWidget(m_db, this);
     m_searchResultWidget = new SearchResultWidget(this);
-    m_detailWidget = new MovieDetailWidget(m_db, m_chatMgr, this);
-    m_friendsWidget = new FriendsWidget(m_chatMgr, this);
+    m_detailWidget = new MovieDetailWidget(m_db, m_chatMgr, m_serverApi, this);
+    m_friendsWidget = new FriendsWidget(m_chatMgr, m_serverApi, this);
     m_profileWidget = new ProfileWidget(m_db, this);
 
     m_stackedWidget->addWidget(m_homeWidget);

@@ -6,15 +6,11 @@
 #include <QDebug>
 #include <memory>
 
-ChatServer::ChatServer(quint16 port, QObject* parent)
+ChatServer::ChatServer(ServerDb* db, quint16 port, QObject* parent)
     : QObject(parent)
     , m_server(new QWebSocketServer("ChatServer", QWebSocketServer::NonSecureMode, this))
-    , m_db(new ServerDb(5, this))
+    , m_db(db)
 {
-    if (!m_db->initialize()) {
-        qWarning() << "Server DB init failed";
-    }
-
     if (m_server->listen(QHostAddress::Any, port)) {
         qDebug() << "Chat server listening on port" << port;
     } else {
@@ -155,6 +151,7 @@ void ChatServer::handleLogin(QWebSocket* socket, const QJsonObject& obj)
             for (const auto& m : data->offlineMsgs) {
                 QJsonObject mo;
                 mo["id"] = m.id;
+                mo["from_id"] = m.fromId;
                 mo["from"] = data->offlineSenderNames.value(m.id);
                 mo["content"] = m.content;
                 mo["time"] = m.time;
@@ -182,6 +179,7 @@ void ChatServer::handleLogin(QWebSocket* socket, const QJsonObject& obj)
         for (int fromId : data->pendingFrom) {
             QJsonObject req;
             req["type"] = "friend_request";
+            req["from_id"] = fromId;
             req["from"] = data->pendingNames.value(fromId);
             sendToSocket(socket, req);
         }
@@ -260,6 +258,7 @@ void ChatServer::handleAddFriend(QWebSocket* socket, const QJsonObject& obj)
         if (m_userToSocket.contains(data->toId)) {
             QJsonObject req;
             req["type"] = "friend_request";
+            req["from_id"] = fromId;
             req["from"] = data->fromName;
             sendToSocket(m_userToSocket[data->toId], req);
         }
@@ -293,12 +292,14 @@ void ChatServer::handleAcceptFriend(QWebSocket* socket, const QJsonObject& obj)
 
         QJsonObject resp;
         resp["type"] = "friend_accepted";
+        resp["user_id"] = data->fromId;
         resp["username"] = fromName;
         sendToSocket(socket, resp);
 
         if (m_userToSocket.contains(data->fromId)) {
             QJsonObject notify;
             notify["type"] = "friend_accepted";
+            notify["user_id"] = toId;
             notify["username"] = data->toName;
             sendToSocket(m_userToSocket[data->fromId], notify);
         }
@@ -361,6 +362,7 @@ void ChatServer::handleSendMessage(QWebSocket* socket, const QJsonObject& obj)
         QJsonObject msgToSender;
         msgToSender["type"] = "send_msg_result";
         msgToSender["id"] = data->msgId;
+        msgToSender["to_id"] = data->toId;
         msgToSender["to"] = toName;
         msgToSender["content"] = content;
         msgToSender["time"] = time;
@@ -369,6 +371,7 @@ void ChatServer::handleSendMessage(QWebSocket* socket, const QJsonObject& obj)
         QJsonObject msgToRecipient;
         msgToRecipient["type"] = "recv_msg";
         msgToRecipient["id"] = data->msgId;
+        msgToRecipient["from_id"] = fromId;
         msgToRecipient["from"] = data->fromName;
         msgToRecipient["content"] = content;
         msgToRecipient["time"] = time;
@@ -405,6 +408,7 @@ void ChatServer::handleGetFriendList(QWebSocket* socket, const QJsonObject&)
         QJsonArray arr;
         for (int fid : data->friendIds) {
             QJsonObject fo;
+            fo["user_id"] = fid;
             fo["username"] = data->names.value(fid);
             fo["online"] = m_userToSocket.contains(fid);
             arr.append(fo);
@@ -453,6 +457,7 @@ void ChatServer::handleGetChatHistory(QWebSocket* socket, const QJsonObject& obj
         for (const auto& m : data->msgs) {
             QJsonObject mo;
             mo["id"] = m.id;
+            mo["from_id"] = m.fromId;
             mo["from"] = data->names.value(m.id);
             mo["content"] = m.content;
             mo["time"] = m.time;
@@ -500,6 +505,7 @@ void ChatServer::notifyOnlineStatus(int userId, bool online)
     }, [this, userId, online, data]() {
         QJsonObject notify;
         notify["type"] = "online_status";
+        notify["user_id"] = userId;
         notify["username"] = data->username;
         notify["online"] = online;
 
@@ -533,7 +539,7 @@ void ChatServer::handleSaveReview(QWebSocket* socket, const QJsonObject& obj)
         data->ok = m_db->saveReview(userId, doubanId, movieName, rating, content, isWished, isWatched, posterUrl);
         if (data->ok)
             data->review = m_db->getReview(userId, doubanId);
-    }, [this, socket, doubanId, data]() {
+    }, [this, socket, userId, doubanId, data]() {
         if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
 
         QJsonObject resp;
@@ -543,6 +549,7 @@ void ChatServer::handleSaveReview(QWebSocket* socket, const QJsonObject& obj)
         if (data->ok) {
             QJsonObject r;
             r["id"] = data->review.id;
+            r["user_id"] = userId;
             r["movie_name"] = data->review.movieName;
             r["rating"] = data->review.rating;
             r["content"] = data->review.content;
@@ -569,7 +576,7 @@ void ChatServer::handleGetReview(QWebSocket* socket, const QJsonObject& obj)
 
     runDbAsync([this, userId, doubanId, data]() {
         data->review = m_db->getReview(userId, doubanId);
-    }, [this, socket, doubanId, data]() {
+    }, [this, socket, userId, doubanId, data]() {
         if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
 
         QJsonObject resp;
@@ -579,6 +586,7 @@ void ChatServer::handleGetReview(QWebSocket* socket, const QJsonObject& obj)
         if (data->review.id > 0) {
             QJsonObject r;
             r["id"] = data->review.id;
+            r["user_id"] = userId;
             r["douban_id"] = data->review.doubanId;
             r["movie_name"] = data->review.movieName;
             r["rating"] = data->review.rating;
@@ -604,13 +612,14 @@ void ChatServer::handleGetAllReviews(QWebSocket* socket, const QJsonObject&)
 
     runDbAsync([this, userId, data]() {
         data->reviews = m_db->getAllReviews(userId);
-    }, [this, socket, data]() {
+    }, [this, socket, userId, data]() {
         if (!socket || socket->state() != QAbstractSocket::ConnectedState) return;
 
         QJsonArray arr;
         for (const auto& rv : data->reviews) {
             QJsonObject r;
             r["id"] = rv.id;
+            r["user_id"] = userId;
             r["douban_id"] = rv.doubanId;
             r["movie_name"] = rv.movieName;
             r["rating"] = rv.rating;
@@ -831,6 +840,7 @@ void ChatServer::handleGetUserReviews(QWebSocket* socket, const QJsonObject& obj
         for (const auto& rv : data->reviews) {
             QJsonObject r;
             r["id"] = rv.id;
+            r["user_id"] = rv.userId;
             r["douban_id"] = rv.doubanId;
             r["movie_name"] = rv.movieName;
             r["rating"] = rv.rating;
@@ -843,6 +853,7 @@ void ChatServer::handleGetUserReviews(QWebSocket* socket, const QJsonObject& obj
         }
         QJsonObject resp;
         resp["type"] = "user_reviews";
+        resp["user_id"] = data->targetId;
         resp["username"] = targetName;
         resp["reviews"] = arr;
         sendToSocket(socket, resp);

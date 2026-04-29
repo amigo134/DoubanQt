@@ -12,12 +12,13 @@
 #include "chatmodel.h"
 #include "chatmessagedelegate.h"
 #include "chatmanager.h"
+#include "serverapiclient.h"
 #include "loadingwidget.h"
 
 class FriendsWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit FriendsWidget(ChatManager* chatMgr, QWidget* parent = nullptr);
+    explicit FriendsWidget(ChatManager* chatMgr, ServerApiClient* serverApi, QWidget* parent = nullptr);
 
     void refreshFriendList();
 
@@ -34,12 +35,12 @@ private slots:
     void onFriendRequestClicked();
     void onLoginResult(bool success);
     void onFriendListReceived(const QList<FriendInfo>& friends);
-    void onFriendRequestReceived(const QString& from);
+    void onFriendRequestReceived(const QString& from, int fromId = 0);
     void onAddFriendResult(bool success, const QString& message);
-    void onFriendAccepted(const QString& username);
-    void onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0);
-    void onMessageSent(const QString& to, const QString& content, const QString& time, int msgId);
-    void onOnlineStatusChanged(const QString& username, bool online);
+    void onFriendAccepted(const QString& username, int userId = 0);
+    void onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0, int fromId = 0);
+    void onMessageSent(const QString& to, const QString& content, const QString& time, int msgId, int toId = 0);
+    void onOnlineStatusChanged(const QString& username, bool online, int userId = 0);
     void onChatDisconnected();
     void onChatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
     void onChatScrollBarValueChanged(int value);
@@ -56,6 +57,7 @@ private:
     void removeTopLoadingIndicator();
 
     ChatManager* m_chatMgr;
+    ServerApiClient* m_serverApi;
 
     QListWidget* m_friendList;
     QPushButton* m_addFriendBtn;
@@ -73,6 +75,7 @@ private:
     LoadingWidget* m_loadingIndicator;
 
     QString m_currentChatUser;
+    int m_currentChatUserId = 0;
     QList<FriendInfo> m_friends;
     QStringList m_pendingRequests;
 

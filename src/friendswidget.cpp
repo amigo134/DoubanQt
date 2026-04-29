@@ -6,9 +6,10 @@
 #include <QFrame>
 #include <QResizeEvent>
 
-FriendsWidget::FriendsWidget(ChatManager* chatMgr, QWidget* parent)
+FriendsWidget::FriendsWidget(ChatManager* chatMgr, ServerApiClient* serverApi, QWidget* parent)
     : QWidget(parent)
     , m_chatMgr(chatMgr)
+    , m_serverApi(serverApi)
     , m_chatModel(nullptr)
     , m_chatDelegate(nullptr)
     , m_loadingIndicator(nullptr)
@@ -17,12 +18,8 @@ FriendsWidget::FriendsWidget(ChatManager* chatMgr, QWidget* parent)
 
     connect(m_chatMgr, &ChatManager::loginResult,
             this, &FriendsWidget::onLoginResult);
-    connect(m_chatMgr, &ChatManager::friendListReceived,
-            this, &FriendsWidget::onFriendListReceived);
     connect(m_chatMgr, &ChatManager::friendRequestReceived,
             this, &FriendsWidget::onFriendRequestReceived);
-    connect(m_chatMgr, &ChatManager::addFriendResult,
-            this, &FriendsWidget::onAddFriendResult);
     connect(m_chatMgr, &ChatManager::friendAccepted,
             this, &FriendsWidget::onFriendAccepted);
     connect(m_chatMgr, &ChatManager::messageReceived,
@@ -33,7 +30,13 @@ FriendsWidget::FriendsWidget(ChatManager* chatMgr, QWidget* parent)
             this, &FriendsWidget::onOnlineStatusChanged);
     connect(m_chatMgr, &ChatManager::disconnected,
             this, &FriendsWidget::onChatDisconnected);
-    connect(m_chatMgr, &ChatManager::chatHistoryReceived,
+
+    // HTTP-based operations via ServerApiClient
+    connect(m_serverApi, &ServerApiClient::friendListReceived,
+            this, &FriendsWidget::onFriendListReceived);
+    connect(m_serverApi, &ServerApiClient::addFriendResult,
+            this, &FriendsWidget::onAddFriendResult);
+    connect(m_serverApi, &ServerApiClient::chatHistoryReceived,
             this, &FriendsWidget::onChatHistoryReceived);
 }
 
@@ -188,8 +191,9 @@ void FriendsWidget::buildUI()
 
 void FriendsWidget::refreshFriendList()
 {
-    if (m_chatMgr->isConnected()) {
-        m_chatMgr->requestFriendList();
+    int uid = m_chatMgr->serverUserId();
+    if (uid > 0) {
+        m_serverApi->getFriendList(uid);
     }
 }
 
@@ -214,7 +218,8 @@ void FriendsWidget::onAddFriendClicked()
     bool ok = false;
     QString username = QInputDialog::getText(this, "添加好友", "输入用户名:", QLineEdit::Normal, "", &ok);
     if (ok && !username.trimmed().isEmpty()) {
-        m_chatMgr->sendAddFriend(username.trimmed());
+        int uid = m_chatMgr->serverUserId();
+        if (uid > 0) m_serverApi->addFriend(uid, username.trimmed());
     }
 }
 
@@ -234,10 +239,11 @@ void FriendsWidget::onFriendRequestClicked()
         this, "好友请求", QString("是否同意 %1 的好友请求？").arg(selected),
         QMessageBox::Yes | QMessageBox::No);
 
+    int uid = m_chatMgr->serverUserId();
     if (reply == QMessageBox::Yes) {
-        m_chatMgr->acceptFriend(selected);
+        if (uid > 0) m_serverApi->acceptFriend(uid, selected);
     } else {
-        m_chatMgr->rejectFriend(selected);
+        if (uid > 0) m_serverApi->rejectFriend(uid, selected);
     }
 }
 
@@ -247,6 +253,7 @@ void FriendsWidget::onLoginResult(bool success)
         m_statusLabel->setText("已连接");
         m_statusLabel->setStyleSheet("background: #E8F5E9; color: #00B51D; font-size: 12px; border-bottom: 1px solid #E8E8EC;");
         emit connectionStatusChanged(true);
+        refreshFriendList();
     } else {
         m_statusLabel->setText("连接失败");
         m_statusLabel->setStyleSheet("background: #FDE8E8; color: #e74c3c; font-size: 12px; border-bottom: 1px solid #E8E8EC;");
@@ -260,8 +267,9 @@ void FriendsWidget::onFriendListReceived(const QList<FriendInfo>& friends)
     updateFriendListUI();
 }
 
-void FriendsWidget::onFriendRequestReceived(const QString& from)
+void FriendsWidget::onFriendRequestReceived(const QString& from, int fromId)
 {
+    Q_UNUSED(fromId);
     if (!m_pendingRequests.contains(from)) {
         m_pendingRequests.append(from);
         updateRequestBadge();
@@ -277,23 +285,26 @@ void FriendsWidget::onAddFriendResult(bool success, const QString& message)
     }
 }
 
-void FriendsWidget::onFriendAccepted(const QString& username)
+void FriendsWidget::onFriendAccepted(const QString& username, int userId)
 {
+    Q_UNUSED(userId);
     m_pendingRequests.removeAll(username);
     updateRequestBadge();
-    m_chatMgr->requestFriendList();
+    int uid = m_chatMgr->serverUserId();
+    if (uid > 0) m_serverApi->getFriendList(uid);
 }
 
-void FriendsWidget::onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId)
+void FriendsWidget::onMessageReceived(const QString& from, const QString& content, const QString& time, int msgId, int fromId)
 {
     ChatMsg msg;
     msg.id = msgId;
+    msg.fromId = fromId;
     msg.from = from;
     msg.content = content;
     msg.time = time;
     msg.isOwn = false;
 
-    if (from == m_currentChatUser && m_chatModel) {
+    if (fromId > 0 && fromId == m_currentChatUserId && m_chatModel) {
         m_chatModel->appendMessage(msg);
         scrollToBottom();
     } else {
@@ -304,17 +315,18 @@ void FriendsWidget::onMessageReceived(const QString& from, const QString& conten
     }
 }
 
-void FriendsWidget::onMessageSent(const QString& to, const QString& content, const QString& time, int msgId)
+void FriendsWidget::onMessageSent(const QString& to, const QString& content, const QString& time, int msgId, int toId)
 {
     ChatMsg msg;
     msg.id = msgId;
+    msg.toId = toId;
     msg.from = m_chatMgr->currentUsername();
     msg.to = to;
     msg.content = content;
     msg.time = time;
     msg.isOwn = true;
 
-    if (to == m_currentChatUser && m_chatModel) {
+    if (toId > 0 && toId == m_currentChatUserId && m_chatModel) {
         m_chatModel->appendMessage(msg);
         scrollToBottom();
     } else {
@@ -325,17 +337,17 @@ void FriendsWidget::onMessageSent(const QString& to, const QString& content, con
     }
 }
 
-void FriendsWidget::onOnlineStatusChanged(const QString& username, bool online)
+void FriendsWidget::onOnlineStatusChanged(const QString& username, bool online, int userId)
 {
     for (auto& f : m_friends) {
-        if (f.username == username) {
+        if (f.userId == userId) {
             f.online = online;
             break;
         }
     }
     updateFriendListUI();
 
-    if (username == m_currentChatUser) {
+    if (userId > 0 && userId == m_currentChatUserId) {
         m_chatTitle->setText(username + (online ? "  🟢 在线" : "  ⚪ 离线"));
     }
 }
@@ -467,7 +479,11 @@ void FriendsWidget::openChatWith(const QString& username)
 
     bool online = false;
     for (const auto& f : m_friends) {
-        if (f.username == username) { online = f.online; break; }
+        if (f.username == username) {
+            online = f.online;
+            m_currentChatUserId = f.userId;
+            break;
+        }
     }
     m_chatTitle->setText(username + (online ? "  🟢 在线" : "  ⚪ 离线"));
 
@@ -485,7 +501,8 @@ void FriendsWidget::openChatWith(const QString& username)
     if (!m_historyLoadedUsers.contains(username)) {
         m_isInitialLoad = true;
         m_isLoadingHistory = true;
-        m_chatMgr->requestChatHistory(username, 30, 0);
+        int uid = m_chatMgr->serverUserId();
+        if (uid > 0) m_serverApi->getChatHistory(uid, username, 30, 0);
     } else {
         m_isInitialLoad = false;
         QMetaObject::invokeMethod(this, [this]() {
@@ -513,7 +530,8 @@ void FriendsWidget::requestHistory()
     showTopLoadingIndicator();
 
     int oldestId = m_chatModel->oldestMsgId();
-    m_chatMgr->requestChatHistory(m_currentChatUser, 30, oldestId);
+    int uid = m_chatMgr->serverUserId();
+    if (uid > 0) m_serverApi->getChatHistory(uid, m_currentChatUser, 30, oldestId);
 }
 
 void FriendsWidget::showTopLoadingIndicator()

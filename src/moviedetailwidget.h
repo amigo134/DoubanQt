@@ -11,11 +11,12 @@
 #include "databasemanager.h"
 
 class ChatManager;
+class ServerApiClient;
 
 class MovieDetailWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, QWidget* parent = nullptr);
+    explicit MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, ServerApiClient* serverApi, QWidget* parent = nullptr);
 
     void setMovie(const Movie& movie);
 
@@ -39,6 +40,7 @@ private:
 
     DatabaseManager* m_db;
     ChatManager* m_chatMgr;
+    ServerApiClient* m_serverApi;
     Movie m_movie;
     UserReview m_userReview;
 

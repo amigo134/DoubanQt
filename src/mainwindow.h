@@ -14,6 +14,8 @@
 #include "profilewidget.h"
 #include "friendswidget.h"
 
+class ServerApiClient;
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -42,6 +44,7 @@ private:
     ApiManager* m_api;
     DatabaseManager* m_db;
     ChatManager* m_chatMgr;
+    ServerApiClient* m_serverApi = nullptr;
 
     QLineEdit* m_searchEdit;
     QStackedWidget* m_stackedWidget;

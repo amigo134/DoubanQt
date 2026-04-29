@@ -9,7 +9,7 @@
 class ChatServer : public QObject {
     Q_OBJECT
 public:
-    explicit ChatServer(quint16 port, QObject* parent = nullptr);
+    explicit ChatServer(ServerDb* db, quint16 port, QObject* parent = nullptr);
 
 private slots:
     void onNewConnection();

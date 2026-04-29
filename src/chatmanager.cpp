@@ -57,6 +57,11 @@ QString ChatManager::currentUsername() const
     return m_username;
 }
 
+int ChatManager::serverUserId() const
+{
+    return m_serverUserId;
+}
+
 void ChatManager::sendAddFriend(const QString& username)
 {
     QJsonObject obj;
@@ -219,23 +224,24 @@ void ChatManager::onTextMessageReceived(const QString& message)
     if (type == "login_result") {
         if (obj["success"].toBool()) {
             m_username = obj["username"].toString();
+            m_serverUserId = obj["user_id"].toInt();
         }
         emit loginResult(obj["success"].toBool());
-        if (obj["success"].toBool()) {
-            requestFriendList();
-        }
     } else if (type == "friend_request") {
-        emit friendRequestReceived(obj["from"].toString());
+        emit friendRequestReceived(obj["from"].toString(),
+                                   obj["from_id"].toInt());
     } else if (type == "add_friend_result") {
         emit addFriendResult(obj["success"].toBool(), obj["message"].toString());
     } else if (type == "friend_accepted") {
-        emit friendAccepted(obj["username"].toString());
+        emit friendAccepted(obj["username"].toString(),
+                            obj["user_id"].toInt());
     } else if (type == "friend_list") {
         QList<FriendInfo> friends;
         QJsonArray arr = obj["friends"].toArray();
         for (const QJsonValue& v : arr) {
             QJsonObject fo = v.toObject();
             FriendInfo fi;
+            fi.userId = fo["user_id"].toInt();
             fi.username = fo["username"].toString();
             fi.online = fo["online"].toBool();
             friends.append(fi);
@@ -245,12 +251,14 @@ void ChatManager::onTextMessageReceived(const QString& message)
         emit messageReceived(obj["from"].toString(),
                              obj["content"].toString(),
                              obj["time"].toString(),
-                             obj["id"].toInt());
+                             obj["id"].toInt(),
+                             obj["from_id"].toInt());
     } else if (type == "send_msg_result") {
         emit messageSent(obj["to"].toString(),
                          obj["content"].toString(),
                          obj["time"].toString(),
-                         obj["id"].toInt());
+                         obj["id"].toInt(),
+                         obj["to_id"].toInt());
     } else if (type == "offline_msg") {
         QJsonArray arr = obj["messages"].toArray();
         for (const QJsonValue& v : arr) {
@@ -258,11 +266,13 @@ void ChatManager::onTextMessageReceived(const QString& message)
             emit messageReceived(mo["from"].toString(),
                                  mo["content"].toString(),
                                  mo["time"].toString(),
-                                 mo["id"].toInt());
+                                 mo["id"].toInt(),
+                                 mo["from_id"].toInt());
         }
     } else if (type == "online_status") {
         emit onlineStatusChanged(obj["username"].toString(),
-                                 obj["online"].toBool());
+                                 obj["online"].toBool(),
+                                 obj["user_id"].toInt());
     } else if (type == "chat_history") {
         QString with = obj["with"].toString();
         bool hasMore = obj["has_more"].toBool();
@@ -272,6 +282,7 @@ void ChatManager::onTextMessageReceived(const QString& message)
             QJsonObject mo = v.toObject();
             ChatMsg msg;
             msg.id = mo["id"].toInt();
+            msg.fromId = mo["from_id"].toInt();
             msg.from = mo["from"].toString();
             msg.content = mo["content"].toString();
             msg.time = mo["time"].toString();
@@ -287,6 +298,7 @@ void ChatManager::onTextMessageReceived(const QString& message)
             QJsonObject r = obj["review"].toObject();
             UserReview review;
             review.id = r["id"].toInt();
+            review.userId = r["user_id"].toInt();
             review.doubanId = r["douban_id"].toString();
             review.movieName = r["movie_name"].toString();
             review.rating = r["rating"].toDouble();
@@ -305,6 +317,7 @@ void ChatManager::onTextMessageReceived(const QString& message)
             QJsonObject r = v.toObject();
             UserReview review;
             review.id = r["id"].toInt();
+            review.userId = r["user_id"].toInt();
             review.doubanId = r["douban_id"].toString();
             review.movieName = r["movie_name"].toString();
             review.rating = r["rating"].toDouble();
@@ -362,6 +375,7 @@ void ChatManager::onTextMessageReceived(const QString& message)
             QJsonObject r = v.toObject();
             UserReview review;
             review.id = r["id"].toInt();
+            review.userId = r["user_id"].toInt();
             review.doubanId = doubanId;
             review.username = r["username"].toString();
             review.movieName = r["movie_name"].toString();
@@ -379,6 +393,7 @@ void ChatManager::onTextMessageReceived(const QString& message)
             QJsonObject r = v.toObject();
             UserReview review;
             review.id = r["id"].toInt();
+            review.userId = r["user_id"].toInt();
             review.doubanId = r["douban_id"].toString();
             review.movieName = r["movie_name"].toString();
             review.rating = r["rating"].toDouble();

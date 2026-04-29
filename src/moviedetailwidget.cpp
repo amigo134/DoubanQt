@@ -1,5 +1,6 @@
 #include "moviedetailwidget.h"
 #include "chatmanager.h"
+#include "serverapiclient.h"
 #include "reviewdialog.h"
 #include "imagecache.h"
 #include <QVBoxLayout>
@@ -11,16 +12,17 @@
 #include <QPainterPath>
 #include <QScrollBar>
 
-MovieDetailWidget::MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, QWidget* parent)
+MovieDetailWidget::MovieDetailWidget(DatabaseManager* db, ChatManager* chatMgr, ServerApiClient* serverApi, QWidget* parent)
     : QWidget(parent)
     , m_db(db)
     , m_chatMgr(chatMgr)
+    , m_serverApi(serverApi)
 {
     buildUI();
 
-    connect(m_chatMgr, &ChatManager::reviewReceived,
+    connect(m_serverApi, &ServerApiClient::reviewReceived,
             this, &MovieDetailWidget::onReviewReceived);
-    connect(m_chatMgr, &ChatManager::movieReviewsReceived,
+    connect(m_serverApi, &ServerApiClient::movieReviewsReceived,
             this, &MovieDetailWidget::onMovieReviewsReceived);
 }
 
@@ -406,9 +408,10 @@ void MovieDetailWidget::setMovie(const Movie& movie)
     refreshPublicReviews({}); // clear old reviews, show empty state until data arrives
 
     // Async: request current user's review
-    m_chatMgr->requestGetReview(movie.doubanId);
+    int uid = m_chatMgr->serverUserId();
+    if (uid > 0) m_serverApi->getReview(uid, movie.doubanId);
     // Async: request all users' reviews
-    m_chatMgr->requestMovieReviews(movie.doubanId);
+    m_serverApi->getMovieReviews(movie.doubanId);
 
     m_titleLabel->setText(movie.getName());
     m_originalTitleLabel->setText(movie.originalName != movie.getName()
@@ -643,7 +646,7 @@ void MovieDetailWidget::onWriteReview()
         m_movie.isWished = m_userReview.isWished;
         m_movie.isWatched = m_userReview.isWatched;
         updateUserSection();
-        m_chatMgr->requestMovieReviews(m_movie.doubanId);
+        m_serverApi->getMovieReviews(m_movie.doubanId);
         emit reviewUpdated();
     }
 }

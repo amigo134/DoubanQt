@@ -1,5 +1,6 @@
 #include "databasemanager.h"
 #include "chatmanager.h"
+#include "serverapiclient.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QStandardPaths>
@@ -119,6 +120,11 @@ void DatabaseManager::setChatManager(ChatManager* mgr)
     m_chatMgr = mgr;
 }
 
+void DatabaseManager::setServerApiClient(ServerApiClient* api)
+{
+    m_serverApi = api;
+}
+
 int DatabaseManager::currentUserId() const
 {
     return m_currentUserId;
@@ -140,21 +146,27 @@ void DatabaseManager::ensureProfile()
     // Server auto-creates profile on first getProfile(); no local action needed
 }
 
+int DatabaseManager::serverUserId() const
+{
+    return m_chatMgr ? m_chatMgr->serverUserId() : 0;
+}
+
 bool DatabaseManager::saveReview(const UserReview& review)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return false;
 
     bool result = false;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::reviewSaved,
         [&](bool success, const QString& did) {
             if (did == review.doubanId) { result = success; loop.quit(); }
         });
 
-    m_chatMgr->requestSaveReview(review.doubanId, review.movieName, review.rating,
-                                  review.content, review.isWished, review.isWatched, review.posterUrl);
+    m_serverApi->saveReview(uid, review.doubanId, review.movieName, review.rating,
+                            review.content, review.isWished, review.isWatched, review.posterUrl);
     loop.exec();
     disconnect(conn);
     return result;
@@ -162,22 +174,23 @@ bool DatabaseManager::saveReview(const UserReview& review)
 
 UserReview DatabaseManager::getReview(const QString& doubanId)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     UserReview result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn1 = connect(m_chatMgr, &ChatManager::reviewReceived,
+    QMetaObject::Connection conn1 = connect(m_serverApi, &ServerApiClient::reviewReceived,
         [&](const UserReview& review) {
             if (review.doubanId == doubanId) { result = review; loop.quit(); }
         });
-    QMetaObject::Connection conn2 = connect(m_chatMgr, &ChatManager::reviewSaved,
+    QMetaObject::Connection conn2 = connect(m_serverApi, &ServerApiClient::reviewSaved,
         [&](bool success, const QString& did) {
             if (did == doubanId && !success) loop.quit();
         });
 
-    m_chatMgr->requestGetReview(doubanId);
+    m_serverApi->getReview(uid, doubanId);
     loop.exec();
     disconnect(conn1);
     disconnect(conn2);
@@ -186,16 +199,17 @@ UserReview DatabaseManager::getReview(const QString& doubanId)
 
 QList<UserReview> DatabaseManager::getAllReviews()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QList<UserReview> result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewsListReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::reviewsListReceived,
         [&](const QList<UserReview>& list) { result = list; loop.quit(); });
 
-    m_chatMgr->requestGetAllReviews();
+    m_serverApi->getAllReviews(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -203,18 +217,19 @@ QList<UserReview> DatabaseManager::getAllReviews()
 
 QString DatabaseManager::getProfileName()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return "影迷";
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return "影迷";
 
     QString result = "影迷";
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::profileReceived,
         [&](const QString& name, const QString&, const QString&) {
             result = name; loop.quit();
         });
 
-    m_chatMgr->requestGetProfile();
+    m_serverApi->getProfile(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -222,18 +237,19 @@ QString DatabaseManager::getProfileName()
 
 QString DatabaseManager::getProfileBio()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QString result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::profileReceived,
         [&](const QString&, const QString& bio, const QString&) {
             result = bio; loop.quit();
         });
 
-    m_chatMgr->requestGetProfile();
+    m_serverApi->getProfile(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -241,33 +257,35 @@ QString DatabaseManager::getProfileBio()
 
 void DatabaseManager::saveProfile(const QString& name, const QString& bio)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return;
 
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileSaved,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::profileSaved,
         [&](bool) { loop.quit(); });
 
-    m_chatMgr->requestSaveProfile(name, bio);
+    m_serverApi->saveProfile(uid, name, bio);
     loop.exec();
     disconnect(conn);
 }
 
 QString DatabaseManager::getAvatarPath()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QString result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::profileReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::profileReceived,
         [&](const QString&, const QString&, const QString& path) {
             result = path; loop.quit();
         });
 
-    m_chatMgr->requestGetProfile();
+    m_serverApi->getProfile(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -275,33 +293,35 @@ QString DatabaseManager::getAvatarPath()
 
 void DatabaseManager::saveAvatarPath(const QString& path)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return;
 
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::avatarSaved,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::avatarSaved,
         [&](bool) { loop.quit(); });
 
-    m_chatMgr->requestSaveAvatar(path);
+    m_serverApi->uploadAvatar(uid, path);
     loop.exec();
     disconnect(conn);
 }
 
 bool DatabaseManager::deleteReview(const QString& doubanId)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return false;
 
     bool result = false;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewDeleted,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::reviewDeleted,
         [&](bool success, const QString& did) {
             if (did == doubanId) { result = success; loop.quit(); }
         });
 
-    m_chatMgr->requestDeleteReview(doubanId);
+    m_serverApi->deleteReview(uid, doubanId);
     loop.exec();
     disconnect(conn);
     return result;
@@ -310,7 +330,8 @@ bool DatabaseManager::deleteReview(const QString& doubanId)
 void DatabaseManager::updatePosterUrl(const QString& doubanId, const QString& posterUrl)
 {
     if (posterUrl.isEmpty()) return;
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return;
     // Fire-and-forget: get current review, merge, re-save
     UserReview existing = getReview(doubanId);
     existing.posterUrl = posterUrl;
@@ -319,18 +340,19 @@ void DatabaseManager::updatePosterUrl(const QString& doubanId, const QString& po
 
 bool DatabaseManager::setWished(const QString& doubanId, const QString& movieName, bool wished, const QString& posterUrl)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return false;
 
     bool result = false;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::reviewSaved,
         [&](bool success, const QString& did) {
             if (did == doubanId) { result = success; loop.quit(); }
         });
 
-    m_chatMgr->requestSaveReview(doubanId, movieName, 0, QString(), wished, false, posterUrl);
+    m_serverApi->saveReview(uid, doubanId, movieName, 0, QString(), wished, false, posterUrl);
     loop.exec();
     disconnect(conn);
     return result;
@@ -338,18 +360,19 @@ bool DatabaseManager::setWished(const QString& doubanId, const QString& movieNam
 
 bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieName, bool watched, const QString& posterUrl)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return false;
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return false;
 
     bool result = false;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::reviewSaved,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::reviewSaved,
         [&](bool success, const QString& did) {
             if (did == doubanId) { result = success; loop.quit(); }
         });
 
-    m_chatMgr->requestSaveReview(doubanId, movieName, 0, QString(), false, watched, posterUrl);
+    m_serverApi->saveReview(uid, doubanId, movieName, 0, QString(), false, watched, posterUrl);
     loop.exec();
     disconnect(conn);
     return result;
@@ -357,16 +380,17 @@ bool DatabaseManager::setWatched(const QString& doubanId, const QString& movieNa
 
 QList<UserReview> DatabaseManager::getWishList()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QList<UserReview> result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::wishListReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::wishListReceived,
         [&](const QList<UserReview>& list) { result = list; loop.quit(); });
 
-    m_chatMgr->requestGetWishList();
+    m_serverApi->getWishList(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -374,16 +398,17 @@ QList<UserReview> DatabaseManager::getWishList()
 
 QList<UserReview> DatabaseManager::getWatchedList()
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QList<UserReview> result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::watchedListReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::watchedListReceived,
         [&](const QList<UserReview>& list) { result = list; loop.quit(); });
 
-    m_chatMgr->requestGetWatchedList();
+    m_serverApi->getWatchedList(uid);
     loop.exec();
     disconnect(conn);
     return result;
@@ -391,18 +416,18 @@ QList<UserReview> DatabaseManager::getWatchedList()
 
 QList<UserReview> DatabaseManager::getMovieReviews(const QString& doubanId)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    if (!m_serverApi) return {};
 
     QList<UserReview> result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::movieReviewsReceived,
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::movieReviewsReceived,
         [&](const QString& did, const QList<UserReview>& list) {
             if (did == doubanId) { result = list; loop.quit(); }
         });
 
-    m_chatMgr->requestMovieReviews(doubanId);
+    m_serverApi->getMovieReviews(doubanId);
     loop.exec();
     disconnect(conn);
     return result;
@@ -410,18 +435,17 @@ QList<UserReview> DatabaseManager::getMovieReviews(const QString& doubanId)
 
 QList<UserReview> DatabaseManager::getUserReviews(const QString& username)
 {
-    if (!m_chatMgr || !m_chatMgr->isConnected()) return {};
+    int uid = serverUserId();
+    if (!m_serverApi || uid == 0) return {};
 
     QList<UserReview> result;
     QEventLoop loop;
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
 
-    QMetaObject::Connection conn = connect(m_chatMgr, &ChatManager::userReviewsReceived,
-        [&](const QString& uname, const QList<UserReview>& list) {
-            if (uname == username) { result = list; loop.quit(); }
-        });
+    QMetaObject::Connection conn = connect(m_serverApi, &ServerApiClient::userReviewsReceived,
+        [&](const QString&, const QList<UserReview>& list) { result = list; loop.quit(); });
 
-    m_chatMgr->requestUserReviews(username);
+    m_serverApi->getUserReviews(uid);
     loop.exec();
     disconnect(conn);
     return result;

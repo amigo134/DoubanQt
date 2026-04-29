@@ -13,6 +13,7 @@ public:
     void disconnectFromServer();
     bool isConnected() const;
     QString currentUsername() const;
+    int serverUserId() const;
 
     void sendAddFriend(const QString& username);
     void acceptFriend(const QString& username);
@@ -39,14 +40,14 @@ signals:
     void connected();
     void connectionFailed(const QString& error);
     void loginResult(bool success);
-    void friendRequestReceived(const QString& from);
+    void friendRequestReceived(const QString& from, int fromId = 0);
     void addFriendResult(bool success, const QString& message);
-    void friendAccepted(const QString& username);
+    void friendAccepted(const QString& username, int userId = 0);
     void friendListReceived(const QList<FriendInfo>& friends);
-    void messageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0);
-    void messageSent(const QString& to, const QString& content, const QString& time, int msgId);
+    void messageReceived(const QString& from, const QString& content, const QString& time, int msgId = 0, int fromId = 0);
+    void messageSent(const QString& to, const QString& content, const QString& time, int msgId, int toId = 0);
     void chatHistoryReceived(const QString& with, const QList<ChatMsg>& messages, bool hasMore);
-    void onlineStatusChanged(const QString& username, bool online);
+    void onlineStatusChanged(const QString& username, bool online, int userId = 0);
     void disconnected();
 
     // Review signals
@@ -74,4 +75,5 @@ private:
     QWebSocket* m_socket;
     QString m_username;
     QString m_serverUrl;
+    int m_serverUserId = 0;
 };

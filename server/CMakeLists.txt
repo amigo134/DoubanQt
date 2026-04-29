@@ -7,17 +7,19 @@ set(CMAKE_AUTOMOC ON)
 
 set(CMAKE_PREFIX_PATH "C:/Qt/5.15.2/mingw81_64")
 
-find_package(Qt5 REQUIRED COMPONENTS Core WebSockets Sql Concurrent)
+find_package(Qt5 REQUIRED COMPONENTS Core Network WebSockets Sql Concurrent)
 
 add_executable(ChatServer
     main.cpp
     chatserver.cpp
+    httpserver.cpp
     serverdb.cpp
     connectionpool.cpp
 )
 
 target_link_libraries(ChatServer PRIVATE
     Qt5::Core
+    Qt5::Network
     Qt5::WebSockets
     Qt5::Sql
     Qt5::Concurrent
