@@ -11,6 +11,8 @@
 #include "moviemodel.h"
 #include "databasemanager.h"
 
+class MovieCube;
+
 class HomeWidget : public QWidget {
     Q_OBJECT
 public:
@@ -59,6 +61,8 @@ private:
     int m_top250Cols = 0;
 
     QList<UserReview> m_watchedData;
+
+    MovieCube* m_movieCube = nullptr;
 
     static const QStringList HOT_SEARCHES;
     static constexpr int MY_CARD_W = 120;

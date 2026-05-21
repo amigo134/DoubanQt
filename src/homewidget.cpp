@@ -1,4 +1,5 @@
 #include "homewidget.h"
+#include "moviecube.h"
 #include "imagecache.h"
 #include <QScrollArea>
 #include <QScrollBar>
@@ -54,26 +55,11 @@ void HomeWidget::buildUI()
     root->setContentsMargins(24, 20, 24, 20);
     root->setSpacing(18);
 
-    auto* banner = new QFrame();
-    banner->setObjectName("banner");
-    banner->setStyleSheet(R"(
-        QFrame#banner {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #00C49A, stop:1 #009A73);
-            border-radius: 12px;
-        }
-    )");
-    banner->setFixedHeight(120);
-    auto* bl = new QVBoxLayout(banner);
-    bl->setContentsMargins(28, 20, 28, 20);
-    bl->setSpacing(4);
-    auto* t1 = new QLabel("发现好电影");
-    t1->setStyleSheet("font-size: 22px; font-weight: bold; color: white; background: transparent;");
-    auto* t2 = new QLabel("WMDB · 豆瓣 · IMDb · 烂番茄 全球影视数据");
-    t2->setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75); background: transparent;");
-    bl->addWidget(t1);
-    bl->addWidget(t2);
-    root->addWidget(banner);
+    m_movieCube = new MovieCube(content);
+    m_movieCube->setFixedHeight(280);
+    m_movieCube->setMinimumHeight(280);
+    m_movieCube->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    root->addWidget(m_movieCube);
 
     auto* hotTitle = new QLabel("热门搜索");
     hotTitle->setStyleSheet("font-size: 15px; font-weight: bold; color: #333; border-left: 3px solid #00B386; padding-left: 8px;");
@@ -367,6 +353,10 @@ void HomeWidget::setTop250Data(const QList<Movie>& movies)
             m_top250OuterLayout->addLayout(row);
         }
         row->addWidget(card);
+    }
+
+    if (m_movieCube) {
+        m_movieCube->setMovies(movies.mid(0, 6));
     }
 }
 

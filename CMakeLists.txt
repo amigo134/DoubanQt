@@ -9,7 +9,7 @@ set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_PREFIX_PATH "C:/Qt/5.15.2/mingw81_64")
 
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network Sql WebSockets)
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network Sql WebSockets OpenGL)
 
 set(SOURCES
     src/main.cpp
@@ -35,6 +35,7 @@ set(SOURCES
     src/chatmessagedelegate.cpp
     src/serverapiclient.cpp
     src/avatarcache.cpp
+    src/moviecube.cpp
 )
 
 set(HEADERS
@@ -62,6 +63,7 @@ set(HEADERS
     src/loadingwidget.h
     src/serverapiclient.h
     src/avatarcache.h
+    src/moviecube.h
 )
 
 set(RESOURCES
@@ -81,6 +83,7 @@ target_link_libraries(DoubanQt PRIVATE
     Qt5::Network
     Qt5::Sql
     Qt5::WebSockets
+    Qt5::OpenGL
 )
 
 target_include_directories(DoubanQt PRIVATE src)

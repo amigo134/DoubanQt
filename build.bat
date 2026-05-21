@@ -41,7 +41,7 @@ if not exist dist mkdir dist
 copy build\DoubanQt.exe dist\
 
 :: 复制 Qt 核心 DLL
-for %%f in (Qt5Core Qt5Gui Qt5Network Qt5Sql Qt5Widgets Qt5Xml) do (
+for %%f in (Qt5Core Qt5Gui Qt5Network Qt5Sql Qt5Widgets Qt5Xml Qt5OpenGL) do (
     copy "%QT_DIR%\bin\%%f.dll" dist\ >nul 2>&1
 )
 
@@ -55,6 +55,9 @@ for %%f in (libgcc_s_seh-1 libstdc++-6 libwinpthread-1) do (
 for %%f in (libssl-1_1-x64 libcrypto-1_1-x64) do (
     copy "C:\Qt\Tools\mingw1120_64\opt\bin\%%f.dll" dist\ >nul 2>&1
 )
+
+:: 复制 OpenGL 软件渲染回退
+copy "%QT_DIR%\bin\opengl32sw.dll" dist\ >nul 2>&1
 
 :: 复制平台插件
 if not exist dist\platforms mkdir dist\platforms
